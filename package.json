@@ -1,0 +1,36 @@
+{
+  "name": "bigmart-backend",
+  "version": "1.0.0",
+  "description": "Production-oriented multi-vendor e-commerce marketplace backend foundation",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [
+    "ecommerce",
+    "marketplace",
+    "express",
+    "mongoose",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.9.3",
+    "morgan": "^1.10.0",
+    "nodemailer": "^10.0.13",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

@@ -1,0 +1,20 @@
+# Environment configuration files
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Logs & temporary directories
+logs/
+*.log
+
+# File uploads
+uploads/
+
+# Operating system / IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
