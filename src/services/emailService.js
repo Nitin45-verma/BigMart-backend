@@ -213,10 +213,210 @@ const sendSellerApplicationRejectedEmail = async ({ toEmail, userName, businessN
   }
 };
 
+/**
+ * Generic safe email sender — logs failures without throwing.
+ * Database operations must succeed independently of email delivery.
+ */
+const sendSafeEmail = async ({ to, subject, html, text }) => {
+  const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER || '"BigMart Marketplace" <no-reply@bigmart.com>';
+  try {
+    const transporter = createTransporter();
+    const info = await transporter.sendMail({ from: sender, to, subject, html, text });
+    console.log(`[EmailService] Email sent to ${to} — Subject: "${subject}" — MessageId: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    // Log without exposing SMTP credentials or internal details
+    console.error(`[EmailService] Failed to send email to ${to} — Subject: "${subject}" — ${error.message}`);
+    return { success: false, error: error.message };
+  }
+};
+
+/** Order confirmation email */
+const sendOrderConfirmationEmail = async ({ toEmail, userName, orderNumber, grandTotal }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Order Confirmed — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Order Confirmed!</h2>
+      <p>Hello ${userName},</p>
+      <p>Your order <strong>#${orderNumber}</strong> has been placed successfully.</p>
+      <p>Order Total: <strong>₹${grandTotal}</strong></p>
+      <p>We will notify you when your order is shipped.</p>
+      <p>Thank you for shopping with BigMart!</p>
+    </div>`,
+    text: `Hello ${userName}, your order #${orderNumber} has been placed. Total: ₹${grandTotal}.`
+  });
+};
+
+/** Payment success email */
+const sendPaymentSuccessEmail = async ({ toEmail, userName, orderNumber, grandTotal }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Payment Confirmed — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Payment Successful!</h2>
+      <p>Hello ${userName},</p>
+      <p>Your payment of <strong>₹${grandTotal}</strong> for order <strong>#${orderNumber}</strong> was successful.</p>
+      <p>Your order is now being processed.</p>
+    </div>`,
+    text: `Hello ${userName}, payment of ₹${grandTotal} for order #${orderNumber} was successful.`
+  });
+};
+
+/** Payment failure email */
+const sendPaymentFailedEmail = async ({ toEmail, userName, orderNumber }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Payment Failed — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Payment Failed</h2>
+      <p>Hello ${userName},</p>
+      <p>Your payment for order <strong>#${orderNumber}</strong> could not be processed.</p>
+      <p>Please retry your payment or contact support.</p>
+    </div>`,
+    text: `Hello ${userName}, payment for order #${orderNumber} failed. Please retry.`
+  });
+};
+
+/** Order cancellation email */
+const sendOrderCancelledEmail = async ({ toEmail, userName, orderNumber }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Order Cancelled — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Order Cancelled</h2>
+      <p>Hello ${userName},</p>
+      <p>Your order <strong>#${orderNumber}</strong> has been cancelled.</p>
+      <p>If you paid online, a refund will be processed shortly.</p>
+    </div>`,
+    text: `Hello ${userName}, your order #${orderNumber} has been cancelled.`
+  });
+};
+
+/** Return requested email (customer) */
+const sendReturnRequestedEmail = async ({ toEmail, userName, orderNumber, refundAmount }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Return Request Submitted — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Return Request Received</h2>
+      <p>Hello ${userName},</p>
+      <p>Your return request for order <strong>#${orderNumber}</strong> has been submitted.</p>
+      <p>Expected refund amount: <strong>₹${refundAmount}</strong></p>
+      <p>Our team will review your request within 2–3 business days.</p>
+    </div>`,
+    text: `Hello ${userName}, return request for order #${orderNumber} submitted. Expected refund: ₹${refundAmount}.`
+  });
+};
+
+/** Return approved email (customer) */
+const sendReturnApprovedEmail = async ({ toEmail, userName, orderNumber, refundAmount }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Return Approved — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Return Request Approved</h2>
+      <p>Hello ${userName},</p>
+      <p>Your return request for order <strong>#${orderNumber}</strong> has been approved.</p>
+      <p>A refund of <strong>₹${refundAmount}</strong> will be initiated.</p>
+    </div>`,
+    text: `Hello ${userName}, return for order #${orderNumber} approved. Refund: ₹${refundAmount}.`
+  });
+};
+
+/** Return rejected email (customer) */
+const sendReturnRejectedEmail = async ({ toEmail, userName, orderNumber, rejectionReason }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Return Request Update — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Return Request Not Approved</h2>
+      <p>Hello ${userName},</p>
+      <p>Your return request for order <strong>#${orderNumber}</strong> could not be approved.</p>
+      ${rejectionReason ? `<p><strong>Reason:</strong> ${rejectionReason}</p>` : ''}
+      <p>Please contact support if you need further assistance.</p>
+    </div>`,
+    text: `Hello ${userName}, return for order #${orderNumber} was not approved. Reason: ${rejectionReason || 'N/A'}.`
+  });
+};
+
+/** Refund initiated email (customer) */
+const sendRefundInitiatedEmail = async ({ toEmail, userName, orderNumber, refundAmount }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Refund Initiated — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Refund Initiated</h2>
+      <p>Hello ${userName},</p>
+      <p>Your refund of <strong>₹${refundAmount}</strong> for order <strong>#${orderNumber}</strong> is being processed.</p>
+      <p>Refunds typically appear within 5–7 business days depending on your bank.</p>
+    </div>`,
+    text: `Hello ${userName}, refund of ₹${refundAmount} for order #${orderNumber} is being processed.`
+  });
+};
+
+/** Refund completed email (customer) */
+const sendRefundCompletedEmail = async ({ toEmail, userName, orderNumber, refundAmount }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Refund Completed — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Refund Completed</h2>
+      <p>Hello ${userName},</p>
+      <p>Your refund of <strong>₹${refundAmount}</strong> for order <strong>#${orderNumber}</strong> has been processed.</p>
+      <p>Please allow a few business days for it to appear in your account.</p>
+    </div>`,
+    text: `Hello ${userName}, refund of ₹${refundAmount} for order #${orderNumber} completed.`
+  });
+};
+
+/** Seller new order notification email */
+const sendSellerOrderNotificationEmail = async ({ toEmail, sellerName, orderNumber, itemCount }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `New Order Received — #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>New Order Received!</h2>
+      <p>Hello ${sellerName},</p>
+      <p>Order <strong>#${orderNumber}</strong> has been placed with <strong>${itemCount}</strong> item(s) from your store.</p>
+      <p>Please log in to your seller dashboard to process the order.</p>
+    </div>`,
+    text: `Hello ${sellerName}, new order #${orderNumber} with ${itemCount} item(s) received.`
+  });
+};
+
+/** Seller return requested notification email */
+const sendSellerReturnNotificationEmail = async ({ toEmail, sellerName, orderNumber }) => {
+  return sendSafeEmail({
+    to: toEmail,
+    subject: `Return Request — Order #${orderNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;padding:20px;color:#333">
+      <h2>Return Request Received</h2>
+      <p>Hello ${sellerName},</p>
+      <p>A customer has submitted a return request for order <strong>#${orderNumber}</strong>.</p>
+      <p>Please review it in your seller dashboard.</p>
+    </div>`,
+    text: `Hello ${sellerName}, a return request was submitted for order #${orderNumber}.`
+  });
+};
+
 module.exports = {
   createTransporter,
   verifyTransporter,
   sendVerificationEmail,
   sendSellerApplicationApprovedEmail,
-  sendSellerApplicationRejectedEmail
+  sendSellerApplicationRejectedEmail,
+  // Step 16 email functions
+  sendSafeEmail,
+  sendOrderConfirmationEmail,
+  sendPaymentSuccessEmail,
+  sendPaymentFailedEmail,
+  sendOrderCancelledEmail,
+  sendReturnRequestedEmail,
+  sendReturnApprovedEmail,
+  sendReturnRejectedEmail,
+  sendRefundInitiatedEmail,
+  sendRefundCompletedEmail,
+  sendSellerOrderNotificationEmail,
+  sendSellerReturnNotificationEmail
 };

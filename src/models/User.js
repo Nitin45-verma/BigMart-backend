@@ -70,7 +70,8 @@ const userSchema = new mongoose.Schema(
     },
     isBlocked: {
       type: Boolean,
-      default: false
+      default: false,
+      index: true
     },
     lastLoginAt: {
       type: Date
@@ -116,6 +117,8 @@ const userSchema = new mongoose.Schema(
     }
   }
 );
+
+userSchema.index({ role: 1, isBlocked: 1, createdAt: -1 });
 
 const User = mongoose.model('User', userSchema);
 

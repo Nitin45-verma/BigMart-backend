@@ -20,10 +20,17 @@ const connectDB = async () => {
       // Fallback silently if custom DNS setting fails
     }
 
-    const conn = await mongoose.connect(mongoUri);
-
-    console.log(`[MongoDB] Connected successfully to host: ${conn.connection.host}`);
-    return conn;
+    try {
+      const conn = await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+      console.log(`[MongoDB] Connected successfully to host: ${conn.connection.host}`);
+      return conn;
+    } catch (primaryError) {
+      console.warn(`[MongoDB] Primary connection failed (${primaryError.message}). Attempting fallback to local MongoDB...`);
+      const fallbackUri = 'mongodb://127.0.0.1:27017/BigMart';
+      const conn = await mongoose.connect(fallbackUri, { serverSelectionTimeoutMS: 5000 });
+      console.log(`[MongoDB] Connected successfully to local fallback host: ${conn.connection.host}`);
+      return conn;
+    }
   } catch (error) {
     console.error(`[MongoDB] Connection error: ${error.message}`);
     // Rethrow to allow server startup wrapper to handle failure cleanly

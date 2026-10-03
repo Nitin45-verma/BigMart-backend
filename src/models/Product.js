@@ -111,6 +111,24 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
       index: true
+    },
+    ratingAverage: {
+      type: Number,
+      default: 0,
+      min: [0, 'Rating average cannot be negative'],
+      max: [5, 'Rating average cannot exceed 5']
+    },
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Rating count cannot be negative']
+    },
+    ratingBreakdown: {
+      1: { type: Number, default: 0 },
+      2: { type: Number, default: 0 },
+      3: { type: Number, default: 0 },
+      4: { type: Number, default: 0 },
+      5: { type: Number, default: 0 }
     }
   },
   {

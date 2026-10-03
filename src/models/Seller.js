@@ -8,7 +8,9 @@ const addressSchema = new mongoose.Schema(
     city: { type: String, trim: true },
     state: { type: String, trim: true },
     postalCode: { type: String, trim: true },
-    country: { type: String, trim: true }
+    country: { type: String, trim: true },
+    latitude: { type: Number, min: [-90, 'Latitude must be between -90 and 90'], max: [90, 'Latitude must be between -90 and 90'] },
+    longitude: { type: Number, min: [-180, 'Longitude must be between -180 and 180'], max: [180, 'Longitude must be between -180 and 180'] }
   },
   { _id: false }
 );
@@ -49,6 +51,10 @@ const sellerSchema = new mongoose.Schema(
       required: [true, 'Business name is required'],
       trim: true
     },
+    description: {
+      type: String,
+      trim: true
+    },
     businessType: {
       type: String,
       enum: {
@@ -77,6 +83,16 @@ const sellerSchema = new mongoose.Schema(
     },
     businessAddress: addressSchema,
     pickupAddress: addressSchema,
+    latitude: {
+      type: Number,
+      min: [-90, 'Latitude must be between -90 and 90'],
+      max: [90, 'Latitude must be between -90 and 90']
+    },
+    longitude: {
+      type: Number,
+      min: [-180, 'Longitude must be between -180 and 180'],
+      max: [180, 'Longitude must be between -180 and 180']
+    },
     documents: [documentSchema],
     bankDetails: {
       type: bankDetailsSchema,
@@ -139,6 +155,9 @@ const sellerSchema = new mongoose.Schema(
     }
   }
 );
+
+sellerSchema.index({ businessType: 1, verificationStatus: 1, createdAt: -1 });
+sellerSchema.index({ createdAt: -1 });
 
 const Seller = mongoose.model('Seller', sellerSchema);
 
