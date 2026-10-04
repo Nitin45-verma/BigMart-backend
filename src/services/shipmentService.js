@@ -6,6 +6,7 @@ const ApiError = require('../utils/ApiError');
 const mockProvider = require('./shippingProviders/mockShippingProvider');
 const notificationService = require('./notificationService');
 const { logAdminAction } = require('./adminAuditService');
+const sellerWalletService = require('./sellerWalletService');
 
 const providers = {
   mock: mockProvider
@@ -128,6 +129,10 @@ const transitionShipmentStatusByAdmin = async (adminId, shipmentId, newStatus, r
     fulfillment.deliveredAt = now;
   }
   await fulfillment.save();
+
+  if (newStatus === 'DELIVERED') {
+    await sellerWalletService.settleSellerEarningIfEligible(shipment.order, fulfillment.seller);
+  }
 
   // Audit
   await logAdminAction({

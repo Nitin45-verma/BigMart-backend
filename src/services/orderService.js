@@ -10,6 +10,7 @@ const { roundMoney, toPaise, calculateGST } = require('../utils/moneyUtils');
 const razorpayService = require('./razorpayService');
 const notificationService = require('./notificationService');
 const emailService = require('./emailService');
+const sellerWalletService = require('./sellerWalletService');
 const couponService = require('./couponService');
 const CouponUsage = require('../models/CouponUsage');
 const Coupon = require('../models/Coupon');
@@ -378,6 +379,9 @@ const verifyPayment = async (userId, { razorpay_order_id, razorpay_payment_id, r
   // Create Fulfillment records for each seller
   const fulfillmentService = require('./fulfillmentService');
   await fulfillmentService.createFulfillmentsForOrder(order);
+
+  // Credit Seller Wallet Earnings (Pending)
+  await sellerWalletService.creditOrderEarnings(order._id);
 
 
   // ── POST-DB: Payment success notifications (fire-and-forget) ──

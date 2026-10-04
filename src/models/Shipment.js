@@ -67,7 +67,6 @@ const shipmentSchema = new mongoose.Schema(
 
 // One active shipment per fulfillment ideally
 shipmentSchema.index({ seller: 1, status: 1, createdAt: -1 });
-shipmentSchema.index({ trackingNumber: 1 });
 
 const Shipment = mongoose.model('Shipment', shipmentSchema);
 module.exports = Shipment;

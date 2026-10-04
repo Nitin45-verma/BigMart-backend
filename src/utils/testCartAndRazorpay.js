@@ -96,7 +96,9 @@ const runStep11Tests = async () => {
       user: sellerUser._id,
       businessName: 'Cart Seller Business',
       businessType: 'small_business',
-      verificationStatus: 'approved'
+      verificationStatus: 'approved',
+      latitude: 19.0760,
+      longitude: 72.8777
     });
 
     customerAAddress = await Address.create({
@@ -108,6 +110,8 @@ const runStep11Tests = async () => {
       state: 'Maharashtra',
       country: 'India',
       postalCode: '400002',
+      latitude: 19.0760,
+      longitude: 72.8777,
       isDefault: true
     });
 
@@ -334,8 +338,8 @@ const runStep11Tests = async () => {
     if (
       validCheckoutRes.status === 201 &&
       createdOrderId &&
-      validCheckoutData.data?.amount === 3000 && // 3 * 1000
-      validCheckoutData.data?.amountPaise === 300000
+      validCheckoutData.data?.amount === 3040 && // 3000 + 40 shipping
+      validCheckoutData.data?.amountPaise === 304000
     ) {
       results['Order Creation'] = 'PASS';
       results['Order Snapshot'] = 'PASS';

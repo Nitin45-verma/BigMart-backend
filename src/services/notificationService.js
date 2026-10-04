@@ -606,6 +606,93 @@ const markAllNotificationsRead = async (userId) => {
   };
 };
 
+/**
+ * Payout notifications
+ */
+const notifyPayoutRequested = async ({ payout, sellerId }) => {
+  const seller = await require('../models/Seller').findById(sellerId).select('user');
+  if (!seller) return;
+  return createNotification({
+    recipient: seller.user,
+    recipientRole: 'seller',
+    type: 'PAYOUT_REQUESTED',
+    title: 'Payout Requested',
+    message: `Your payout request of ₹${payout.amount} has been submitted.`,
+    data: { payoutId: payout._id },
+    eventKey: `PAYOUT_REQ_${payout._id}`
+  });
+};
+
+const notifyPayoutApproved = async ({ payout, sellerId }) => {
+  const seller = await require('../models/Seller').findById(sellerId).select('user');
+  if (!seller) return;
+  return createNotification({
+    recipient: seller.user,
+    recipientRole: 'seller',
+    type: 'PAYOUT_APPROVED',
+    title: 'Payout Approved',
+    message: `Your payout request of ₹${payout.amount} has been approved.`,
+    data: { payoutId: payout._id },
+    eventKey: `PAYOUT_APP_${payout._id}`
+  });
+};
+
+const notifyPayoutRejected = async ({ payout, sellerId }) => {
+  const seller = await require('../models/Seller').findById(sellerId).select('user');
+  if (!seller) return;
+  return createNotification({
+    recipient: seller.user,
+    recipientRole: 'seller',
+    type: 'PAYOUT_REJECTED',
+    title: 'Payout Rejected',
+    message: `Your payout request of ₹${payout.amount} was rejected. Reason: ${payout.rejectionReason}`,
+    data: { payoutId: payout._id },
+    eventKey: `PAYOUT_REJ_${payout._id}`
+  });
+};
+
+const notifyPayoutProcessing = async ({ payout, sellerId }) => {
+  const seller = await require('../models/Seller').findById(sellerId).select('user');
+  if (!seller) return;
+  return createNotification({
+    recipient: seller.user,
+    recipientRole: 'seller',
+    type: 'PAYOUT_PROCESSING',
+    title: 'Payout Processing',
+    message: `Your payout of ₹${payout.amount} is now being processed.`,
+    data: { payoutId: payout._id },
+    eventKey: `PAYOUT_PROC_${payout._id}`
+  });
+};
+
+const notifyPayoutCompleted = async ({ payout, sellerId }) => {
+  const seller = await require('../models/Seller').findById(sellerId).select('user');
+  if (!seller) return;
+  return createNotification({
+    recipient: seller.user,
+    recipientRole: 'seller',
+    type: 'PAYOUT_COMPLETED',
+    title: 'Payout Completed',
+    message: `Your payout of ₹${payout.amount} has been successfully completed.`,
+    data: { payoutId: payout._id },
+    eventKey: `PAYOUT_COMP_${payout._id}`
+  });
+};
+
+const notifyPayoutFailed = async ({ payout, sellerId }) => {
+  const seller = await require('../models/Seller').findById(sellerId).select('user');
+  if (!seller) return;
+  return createNotification({
+    recipient: seller.user,
+    recipientRole: 'seller',
+    type: 'PAYOUT_FAILED',
+    title: 'Payout Failed',
+    message: `Your payout of ₹${payout.amount} failed to process. Funds have been returned to your available balance.`,
+    data: { payoutId: payout._id },
+    eventKey: `PAYOUT_FAIL_${payout._id}`
+  });
+};
+
 module.exports = {
   NOTIFICATION_TYPES,
   createNotification,
@@ -633,5 +720,12 @@ module.exports = {
   getUnreadCount,
   getNotificationById,
   markNotificationRead,
-  markAllNotificationsRead
+  markAllNotificationsRead,
+  
+  notifyPayoutRequested,
+  notifyPayoutApproved,
+  notifyPayoutRejected,
+  notifyPayoutProcessing,
+  notifyPayoutCompleted,
+  notifyPayoutFailed
 };

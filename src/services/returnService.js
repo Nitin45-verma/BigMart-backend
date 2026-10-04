@@ -9,6 +9,7 @@ const { roundMoney, toPaise } = require('../utils/moneyUtils');
 const razorpayService = require('./razorpayService');
 const notificationService = require('./notificationService');
 const emailService = require('./emailService');
+const sellerWalletService = require('./sellerWalletService');
 
 /**
  * Controlled Return Request state transitions map.
@@ -94,6 +95,12 @@ const cancelOrder = async (userId, orderId, reason) => {
     }
 
     order.payment.status = 'refunded';
+    
+    // Debit cancellation amount from all sellers in the order
+    const sellers = new Set(order.items.map(item => item.seller.toString()));
+    for (const sellerId of sellers) {
+      await sellerWalletService.debitCancellationAmount(order._id, sellerId);
+    }
   }
 
   await order.save();
@@ -780,6 +787,14 @@ const processRefund = async (adminUserId, returnId) => {
     });
     razorpayRefundId = refundResult.id;
   }
+
+  // Debit the refund amount from the seller's wallet
+  await sellerWalletService.debitRefundAmount(
+    order._id,
+    returnReq.seller,
+    returnReq.refundAmount,
+    returnReq._id
+  );
 
   returnReq.status = 'refunded';
   returnReq.refundStatus = 'processed';
