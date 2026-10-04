@@ -141,6 +141,7 @@ const runStep19Tests = async () => {
     res = await makeReq('GET', '/wishlist?limit=200', custAToken);
     assert(res.status === 400, '24. Maximum limit enforced');
     
+    res = await makeReq('GET', '/wishlist', custAToken);
     const listedItem = res.data?.data?.items?.[0]?.product;
     assert(listedItem && listedItem.price === 100, '25. Current product price returned');
     assert(listedItem && listedItem.availableStock === 10, '26. Current product stock/availability returned');
@@ -198,7 +199,7 @@ const runStep19Tests = async () => {
     assert(chk.data.data.isWishlisted === false, '41. Wishlist item removed only after successful cart addition');
     
     // Add outOfStock to wishlist directly via DB to bypass validation for test
-    await Wishlist.updateOne({ user: custAToken }, { $push: { items: { product: outOfStockProd._id } } });
+    await Wishlist.updateOne({ user: custA._id }, { $push: { items: { product: outOfStockProd._id } } });
     await Wishlist.findOneAndUpdate({ user: custA._id }, { $push: { items: { product: outOfStockProd._id } } }, {upsert:true});
     res = await makeReq('POST', `/wishlist/items/${outOfStockProd._id}/move-to-cart`, custAToken);
     assert(res.status === 409, '43. Out-of-stock product cannot move to cart');
@@ -211,15 +212,15 @@ const runStep19Tests = async () => {
     assert(res.status === 400 || res.status === 404, '44. Unpublished/archived product cannot move to cart');
     
     const cartRes = await makeReq('GET', '/cart', custAToken);
-    const cartItem = cartRes.data.data.items.find(i => i.product._id === activeProd._id.toString());
-    assert(cartItem.product.price === 100, '45. Current product price is used');
+    const cartItem = cartRes.data?.data?.cart?.items?.find(i => i.product._id.toString() === activeProd._id.toString());
+    assert(cartItem && cartItem.product.price === 100, '45. Current product price is used');
     assert(cartRes.status === 200, '46. Existing cart logic is reused');
     
     await Wishlist.updateOne({ user: custA._id }, { $push: { items: { product: activeProd._id } } });
     await makeReq('POST', `/wishlist/items/${activeProd._id}/move-to-cart`, custAToken);
     const cartRes2 = await makeReq('GET', '/cart', custAToken);
-    const cartItem2 = cartRes2.data.data.items.find(i => i.product._id === activeProd._id.toString());
-    assert(cartItem2.quantity === 2, '47. No duplicate cart item created according to existing cart rules'); // quantity increases
+    const cartItem2 = cartRes2.data?.data?.cart?.items?.find(i => i.product._id.toString() === activeProd._id.toString());
+    assert(cartItem2 && cartItem2.quantity === 2, '47. No duplicate cart item created according to existing cart rules'); // quantity increases
 
     // K. PRODUCT CHANGES
     await Product.updateOne({ _id: activeProd._id }, { $set: { price: 999 } });

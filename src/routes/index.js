@@ -30,6 +30,8 @@ const reviewRoutes = require('./reviewRoutes');
 const sellerReviewRoutes = require('./sellerReviewRoutes');
 const adminReviewRoutes = require('./adminReviewRoutes');
 const wishlistRoutes = require('./wishlistRoutes');
+const adminCouponRoutes = require('./adminCouponRoutes');
+const couponRoutes = require('./couponRoutes');
 
 const router = express.Router();
 
@@ -56,11 +58,13 @@ router.use('/admin/platform-fees', adminPlatformFeeRoutes);
 router.use('/admin/analytics', adminAnalyticsRoutes);
 router.use('/admin/audit-logs', adminAuditRoutes);
 router.use('/admin/finance', adminFinanceRoutes);
+router.use('/admin/coupons', adminCouponRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/products', productRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/cart', cartRoutes);
 router.use('/wishlist', wishlistRoutes);
+router.use('/coupons', couponRoutes);
 router.use('/orders', orderRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/shipping', shippingRoutes);

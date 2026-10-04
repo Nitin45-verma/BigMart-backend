@@ -10,6 +10,9 @@ const { roundMoney, toPaise, calculateGST } = require('../utils/moneyUtils');
 const razorpayService = require('./razorpayService');
 const notificationService = require('./notificationService');
 const emailService = require('./emailService');
+const couponService = require('./couponService');
+const CouponUsage = require('../models/CouponUsage');
+const Coupon = require('../models/Coupon');
 
 /**
  * Generates a human-friendly unique order number (e.g. BM-20261003-8F3K9A1Z)
@@ -33,7 +36,7 @@ const generateOrderNumber = async () => {
  * Customer creates an order from active Cart items.
  * Recalculates all financial values on the server using fresh database values.
  */
-const createOrder = async (userId, addressId) => {
+const createOrder = async (userId, addressId, couponCode = null) => {
   // 1. Verify shipping address ownership
   const address = await Address.findOne({ _id: addressId, user: userId });
   if (!address) {
@@ -112,7 +115,21 @@ const createOrder = async (userId, addressId) => {
   const shippingQuote = await shippingService.getShippingQuote(userId, addressId);
   const deliveryFee = shippingQuote.totalDeliveryFee;
   const platformFee = 0;
-  const discount = 0;
+  
+  let discount = 0;
+  let couponSnapshot = undefined;
+  
+  if (couponCode) {
+    const validationResult = await couponService.validateCouponForCustomer(userId, couponCode);
+    discount = validationResult.discountAmount;
+    couponSnapshot = {
+      couponId: validationResult.coupon._id,
+      code: validationResult.coupon.code,
+      discountType: validationResult.coupon.discountType,
+      discountValue: validationResult.coupon.discountValue,
+      discountAmount: discount
+    };
+  }
 
   const shippingSnapshot = {
     totalDeliveryFee: shippingQuote.totalDeliveryFee,
@@ -125,7 +142,9 @@ const createOrder = async (userId, addressId) => {
     }))
   };
 
-  const grandTotal = roundMoney(calculatedGrandTotal + deliveryFee);
+  let grandTotal = roundMoney(calculatedGrandTotal + deliveryFee - discount);
+  if (grandTotal < 0) grandTotal = 0;
+  
   const grandTotalPaise = toPaise(grandTotal);
 
   // 6. Generate unique order number
@@ -151,6 +170,7 @@ const createOrder = async (userId, addressId) => {
     deliveryFee,
     platformFee,
     discount,
+    coupon: couponSnapshot,
     grandTotal,
     payment: {
       provider: 'razorpay',
@@ -290,6 +310,37 @@ const verifyPayment = async (userId, { razorpay_order_id, razorpay_payment_id, r
         409,
         `Item '${item.name}' went out of stock during payment processing`
       );
+    }
+  }
+
+  if (order.coupon && order.coupon.couponId) {
+    const couponId = order.coupon.couponId;
+    const coupon = await Coupon.findById(couponId);
+    if (coupon) {
+      if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+        order.payment.status = 'failed';
+        order.orderStatus = 'cancelled';
+        await order.save();
+        throw new ApiError(409, 'Coupon usage limit reached during payment processing');
+      }
+      
+      if (coupon.perCustomerLimit !== null) {
+        const userUsageCount = await CouponUsage.countDocuments({ coupon: couponId, customer: userId });
+        if (userUsageCount >= coupon.perCustomerLimit) {
+          order.payment.status = 'failed';
+          order.orderStatus = 'cancelled';
+          await order.save();
+          throw new ApiError(409, 'You have already reached the usage limit for this coupon');
+        }
+      }
+
+      await CouponUsage.create({
+        coupon: couponId,
+        customer: userId,
+        order: order._id,
+        discountAmount: order.coupon.discountAmount
+      });
+      await Coupon.updateOne({ _id: couponId }, { $inc: { usedCount: 1 } });
     }
   }
 
