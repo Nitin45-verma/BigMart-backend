@@ -490,17 +490,85 @@ const markNotificationRead = async (userId, notificationId) => {
 };
 
 /**
+ * Notifies customer when order is ready to ship.
+ */
+const notifyOrderReadyToShip = async ({ order, userId, fulfillment }) => {
+  if (!order || !userId) return null;
+  const eventKey = fulfillment ? `ORDER_READY_TO_SHIP:${fulfillment._id}:${userId}` : `ORDER_READY_TO_SHIP:${order._id}:${userId}`;
+  return createNotification({
+    recipient: userId,
+    recipientRole: 'customer',
+    type: 'ORDER_READY_TO_SHIP',
+    title: 'Order Ready to Ship',
+    message: `Your order #${order.orderNumber} is packed and ready to ship!`,
+    order: order._id,
+    eventKey
+  });
+};
+
+/**
  * Notifies customer when order is shipped.
  */
-const notifyOrderShipped = async ({ order, userId }) => {
+const notifyOrderShipped = async ({ order, userId, shipment }) => {
   if (!order || !userId) return null;
-  const eventKey = `ORDER_SHIPPED:${order._id}:${userId}`;
+  const eventKey = shipment ? `ORDER_SHIPPED:${shipment._id}:${userId}` : `ORDER_SHIPPED:${order._id}:${userId}`;
   return createNotification({
     recipient: userId,
     recipientRole: 'customer',
     type: 'ORDER_SHIPPED',
     title: 'Your Order Has Been Shipped',
     message: `Great news! Your order #${order.orderNumber} is on its way.`,
+    order: order._id,
+    eventKey
+  });
+};
+
+/**
+ * Notifies customer when order is in transit.
+ */
+const notifyOrderInTransit = async ({ order, userId, shipment }) => {
+  if (!order || !userId) return null;
+  const eventKey = shipment ? `ORDER_IN_TRANSIT:${shipment._id}:${userId}` : `ORDER_IN_TRANSIT:${order._id}:${userId}`;
+  return createNotification({
+    recipient: userId,
+    recipientRole: 'customer',
+    type: 'ORDER_IN_TRANSIT',
+    title: 'Order in Transit',
+    message: `Your order #${order.orderNumber} is in transit.`,
+    order: order._id,
+    eventKey
+  });
+};
+
+/**
+ * Notifies customer when order is out for delivery.
+ */
+const notifyOrderOutForDelivery = async ({ order, userId, shipment }) => {
+  if (!order || !userId) return null;
+  const eventKey = shipment ? `ORDER_OUT_FOR_DELIVERY:${shipment._id}:${userId}` : `ORDER_OUT_FOR_DELIVERY:${order._id}:${userId}`;
+  return createNotification({
+    recipient: userId,
+    recipientRole: 'customer',
+    type: 'ORDER_OUT_FOR_DELIVERY',
+    title: 'Order Out for Delivery',
+    message: `Your order #${order.orderNumber} is out for delivery and will arrive soon!`,
+    order: order._id,
+    eventKey
+  });
+};
+
+/**
+ * Notifies customer when delivery failed.
+ */
+const notifyDeliveryFailed = async ({ order, userId, shipment }) => {
+  if (!order || !userId) return null;
+  const eventKey = shipment ? `DELIVERY_FAILED:${shipment._id}:${userId}` : `DELIVERY_FAILED:${order._id}:${userId}`;
+  return createNotification({
+    recipient: userId,
+    recipientRole: 'customer',
+    type: 'DELIVERY_FAILED',
+    title: 'Delivery Failed',
+    message: `Unfortunately, we couldn't deliver your order #${order.orderNumber}. We will retry or contact you.`,
     order: order._id,
     eventKey
   });
@@ -548,7 +616,11 @@ module.exports = {
   notifyPaymentSuccess,
   notifyPaymentFailed,
   notifyOrderCancelled,
+  notifyOrderReadyToShip,
   notifyOrderShipped,
+  notifyOrderInTransit,
+  notifyOrderOutForDelivery,
+  notifyDeliveryFailed,
   notifyOrderDelivered,
   // Return/refund events
   notifyReturnRequested,

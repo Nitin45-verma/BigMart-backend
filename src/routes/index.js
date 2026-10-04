@@ -35,6 +35,9 @@ const couponRoutes = require('./couponRoutes');
 const recommendationRoutes = require('./recommendationRoutes');
 const sellerInventoryRoutes = require('./sellerInventoryRoutes');
 const adminInventoryRoutes = require('./adminInventoryRoutes');
+const sellerFulfillmentRoutes = require('./sellerFulfillmentRoutes');
+const adminFulfillmentRoutes = require('./adminFulfillmentRoutes');
+const adminShipmentRoutes = require('./adminShipmentRoutes');
 
 const router = express.Router();
 
@@ -46,6 +49,7 @@ router.use('/users', userRoutes);
 router.use('/seller/dashboard', sellerDashboardRoutes);
 router.use('/seller/products', sellerProductRoutes);
 router.use('/seller/inventory', sellerInventoryRoutes);
+router.use('/seller/fulfillments', sellerFulfillmentRoutes);
 router.use('/seller/returns', sellerReturnRoutes);
 router.use('/seller/reviews', sellerReviewRoutes);
 router.use('/seller', sellerRoutes);
@@ -56,6 +60,8 @@ router.use('/admin/seller-applications', adminSellerRoutes);
 router.use('/admin/categories', adminCategoryRoutes);
 router.use('/admin/products', adminProductRoutes);
 router.use('/admin/orders', adminOrderRoutes);
+router.use('/admin/fulfillments', adminFulfillmentRoutes);
+router.use('/admin/shipments', adminShipmentRoutes);
 router.use('/admin/returns', adminReturnRoutes);
 router.use('/admin/reviews', adminReviewRoutes);
 router.use('/admin/platform-fees', adminPlatformFeeRoutes);

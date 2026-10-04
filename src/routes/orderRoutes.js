@@ -4,6 +4,7 @@ const { authenticate } = require('../middleware/authMiddleware');
 const { authorizeRoles } = require('../middleware/roleMiddleware');
 const { requireEmailVerified } = require('../middleware/verificationMiddleware');
 const returnController = require('../controllers/returnController');
+const shipmentController = require('../controllers/shipmentController');
 const {
   validateCheckoutInput,
   validateOrderIdParam,
@@ -24,6 +25,7 @@ router.get('/', orderController.getUserOrders);
 router.get('/returns', returnController.getCustomerReturns);
 router.get('/returns/:returnId', validateReturnIdParam, returnController.getCustomerReturnById);
 router.get('/:orderId', validateOrderIdParam, orderController.getOrderById);
+router.get('/:orderId/tracking', validateOrderIdParam, shipmentController.getOrderTracking);
 router.patch('/:orderId/cancel', validateOrderIdParam, validateCancelOrderInput, orderController.cancelOrder);
 router.post('/:orderId/returns', validateOrderIdParam, validateCreateReturnInput, returnController.createReturnRequest);
 
