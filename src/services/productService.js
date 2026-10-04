@@ -216,13 +216,34 @@ const updateSellerProduct = async (userId, productId, updateData) => {
   if (updateData.costPrice !== undefined) product.costPrice = Math.round(updateData.costPrice * 100) / 100;
 
   if (updateData.gstRate !== undefined) product.gstRate = updateData.gstRate;
-  if (updateData.stock !== undefined) product.stock = updateData.stock;
+  
+  let previousStockForMovement = null;
+  if (updateData.stock !== undefined && product.stock !== updateData.stock) {
+    previousStockForMovement = product.stock;
+    product.stock = updateData.stock;
+  }
+  
   if (updateData.lowStockThreshold !== undefined) product.lowStockThreshold = updateData.lowStockThreshold;
   if (updateData.weight !== undefined) product.weight = updateData.weight;
   if (updateData.status !== undefined) product.status = updateData.status;
   if (updateData.isPublished !== undefined) product.isPublished = updateData.isPublished;
 
   await product.save();
+
+  if (previousStockForMovement !== null) {
+    const inventoryService = require('./inventoryService');
+    await inventoryService.recordMovement({
+      product: product._id,
+      seller: product.seller,
+      type: 'PRODUCT_UPDATE',
+      quantity: Math.abs(product.stock - previousStockForMovement),
+      previousStock: previousStockForMovement,
+      newStock: product.stock,
+      reason: 'General product update',
+      performedBy: userId
+    });
+  }
+
   return product;
 };
 

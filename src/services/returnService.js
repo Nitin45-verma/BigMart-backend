@@ -61,11 +61,27 @@ const cancelOrder = async (userId, orderId, reason) => {
 
   if (wasPaid) {
     // Restore stock atomically for all items in order
+    const inventoryService = require('./inventoryService');
     for (const item of order.items) {
-      await Product.updateOne(
+      const updatedProduct = await Product.findOneAndUpdate(
         { _id: item.product },
-        { $inc: { stock: item.quantity } }
+        { $inc: { stock: item.quantity } },
+        { new: true }
       );
+      if (updatedProduct) {
+        await inventoryService.recordMovement({
+          product: item.product,
+          seller: item.seller,
+          type: 'ORDER_CANCEL_RESTORED',
+          quantity: item.quantity,
+          previousStock: updatedProduct.stock - item.quantity,
+          newStock: updatedProduct.stock,
+          reason: `Order cancelled: ${order._id}`,
+          referenceType: 'Order',
+          referenceId: order._id,
+          performedBy: userId
+        });
+      }
     }
 
     // Process refund if payment ID exists
@@ -420,11 +436,27 @@ const approveSellerReturn = async (sellerId, returnId, userId) => {
 
   // Restore stock for approved returned items (idempotency check)
   if (!returnReq.stockRestored) {
+    const inventoryService = require('./inventoryService');
     for (const item of returnReq.items) {
-      await Product.updateOne(
+      const updatedProduct = await Product.findOneAndUpdate(
         { _id: item.product },
-        { $inc: { stock: item.quantity } }
+        { $inc: { stock: item.quantity } },
+        { new: true }
       );
+      if (updatedProduct) {
+        await inventoryService.recordMovement({
+          product: item.product,
+          seller: item.seller, // returnReq items might not have seller, but wait, item.product doesn't have seller either? No, we can get it from updatedProduct.seller.
+          type: 'RETURN_RESTORED',
+          quantity: item.quantity,
+          previousStock: updatedProduct.stock - item.quantity,
+          newStock: updatedProduct.stock,
+          reason: `Return approved: ${returnReq._id}`,
+          referenceType: 'ReturnRequest',
+          referenceId: returnReq._id,
+          performedBy: userId
+        });
+      }
     }
     returnReq.stockRestored = true;
   }
@@ -576,11 +608,27 @@ const approveAdminReturn = async (adminUserId, returnId) => {
   returnReq.reviewedBy = adminUserId;
 
   if (!returnReq.stockRestored) {
+    const inventoryService = require('./inventoryService');
     for (const item of returnReq.items) {
-      await Product.updateOne(
+      const updatedProduct = await Product.findOneAndUpdate(
         { _id: item.product },
-        { $inc: { stock: item.quantity } }
+        { $inc: { stock: item.quantity } },
+        { new: true }
       );
+      if (updatedProduct) {
+        await inventoryService.recordMovement({
+          product: item.product,
+          seller: item.seller,
+          type: 'RETURN_RESTORED',
+          quantity: item.quantity,
+          previousStock: updatedProduct.stock - item.quantity,
+          newStock: updatedProduct.stock,
+          reason: `Admin Return approved: ${returnReq._id}`,
+          referenceType: 'ReturnRequest',
+          referenceId: returnReq._id,
+          performedBy: adminUserId
+        });
+      }
     }
     returnReq.stockRestored = true;
   }
@@ -694,11 +742,27 @@ const processRefund = async (adminUserId, returnId) => {
 
   // Restore stock if not already restored upon approval
   if (!returnReq.stockRestored) {
+    const inventoryService = require('./inventoryService');
     for (const item of returnReq.items) {
-      await Product.updateOne(
+      const updatedProduct = await Product.findOneAndUpdate(
         { _id: item.product },
-        { $inc: { stock: item.quantity } }
+        { $inc: { stock: item.quantity } },
+        { new: true }
       );
+      if (updatedProduct) {
+        await inventoryService.recordMovement({
+          product: item.product,
+          seller: item.seller,
+          type: 'RETURN_RESTORED',
+          quantity: item.quantity,
+          previousStock: updatedProduct.stock - item.quantity,
+          newStock: updatedProduct.stock,
+          reason: `Admin Refund issued: ${returnReq._id}`,
+          referenceType: 'ReturnRequest',
+          referenceId: returnReq._id,
+          performedBy: adminUserId
+        });
+      }
     }
     returnReq.stockRestored = true;
   }

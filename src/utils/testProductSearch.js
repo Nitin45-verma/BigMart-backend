@@ -38,7 +38,7 @@ const runTests = async () => {
     console.log('Connected to MongoDB for Product Search Tests');
 
     // Setup Test Data
-    await Product.deleteMany({ sku: { $regex: 'TEST-SEARCH' } });
+    await Product.deleteMany({ sku: { $regex: 'TEST-' } });
     await Category.deleteMany({ slug: { $regex: 'test-search' } });
     await Seller.deleteMany({ businessName: { $regex: 'Test Search Seller' } });
     await User.deleteMany({ email: { $regex: 'test_search' } });
@@ -58,7 +58,7 @@ const runTests = async () => {
       seller: seller1._id, category: cat1._id, name: `Test Phone ${num}`, slug: `test-phone-${num}-${Date.now()}`, sku: `TEST-SEARCH-P${num}`, description: `Detailed description for phone ${num}`, shortDescription: `Short for ${num}`, price: 1000, compareAtPrice: 1200, gstRate: 18, stock: 10, status: 'active', isPublished: true, brand: 'Samsung', ratingAverage: 4, ratingCount: 10, ...props
     });
 
-    const p1 = await cProd(1, { price: 5000, compareAtPrice: 10000, brand: 'Apple', ratingAverage: 4.5 }); // Apple, $5000, 50% discount
+    const p1 = await cProd(1, { price: 5000, compareAtPrice: 500000, brand: 'Apple', ratingAverage: 4.5 }); // Apple, 99% discount
     const p2 = await cProd(2, { price: 3000, compareAtPrice: 3000, category: cat2._id, ratingAverage: 3.0 }); // Samsung, $3000, 0% discount
     const p3 = await cProd(3, { seller: seller2._id, subCategory: subCat1._id, name: 'Test Headphone 3', stock: 0 }); // out of stock
     const p4 = await cProd(4, { status: 'draft', isPublished: false }); // hidden

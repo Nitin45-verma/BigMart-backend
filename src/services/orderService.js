@@ -295,14 +295,17 @@ const verifyPayment = async (userId, { razorpay_order_id, razorpay_payment_id, r
     throw new ApiError(400, 'Invalid payment signature');
   }
 
+  const inventoryService = require('./inventoryService'); // Import here to avoid circular dep if any
+
   // Stock Concurrency Protection: Atomic conditional stock decrement
   for (const item of order.items) {
-    const updateResult = await Product.updateOne(
+    const updatedProduct = await Product.findOneAndUpdate(
       { _id: item.product, stock: { $gte: item.quantity } },
-      { $inc: { stock: -item.quantity } }
+      { $inc: { stock: -item.quantity } },
+      { new: true }
     );
 
-    if (updateResult.modifiedCount === 0) {
+    if (!updatedProduct) {
       order.payment.status = 'failed';
       order.orderStatus = 'cancelled';
       await order.save();
@@ -311,6 +314,20 @@ const verifyPayment = async (userId, { razorpay_order_id, razorpay_payment_id, r
         `Item '${item.name}' went out of stock during payment processing`
       );
     }
+
+    // Record the inventory movement
+    await inventoryService.recordMovement({
+      product: item.product,
+      seller: item.seller,
+      type: 'ORDER_DEDUCTED',
+      quantity: item.quantity,
+      previousStock: updatedProduct.stock + item.quantity,
+      newStock: updatedProduct.stock,
+      reason: `Order placed: ${order._id}`,
+      referenceType: 'Order',
+      referenceId: order._id,
+      performedBy: order.user
+    });
   }
 
   if (order.coupon && order.coupon.couponId) {
@@ -357,6 +374,11 @@ const verifyPayment = async (userId, { razorpay_order_id, razorpay_payment_id, r
     { user: userId },
     { $pull: { items: { product: { $in: purchasedProductIds } } } }
   );
+
+  // Create Fulfillment records for each seller
+  const fulfillmentService = require('./fulfillmentService');
+  await fulfillmentService.createFulfillmentsForOrder(order);
+
 
   // ── POST-DB: Payment success notifications (fire-and-forget) ──
   setImmediate(async () => {
