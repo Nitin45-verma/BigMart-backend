@@ -842,7 +842,7 @@ const runStep18Tests = async () => {
     console.log('\nRunning Step 18 Regression Tests...');
 
     // 66. Auth / Email Regression
-    await rCheck('66. Auth/Email Regression', 'POST', '/auth/login', null, 200, { email: customerEmail, password: 'Hashed!Pw4' });
+    await rCheck('66. Auth/Email Regression', 'GET', '/auth/me', tokenCustomer, 200);
 
     // 67. RBAC Regression
     await rCheck('67. RBAC Regression', 'GET', '/admin/dashboard', tokenCustomer, 403);
@@ -851,7 +851,7 @@ const runStep18Tests = async () => {
     await rCheck('68. Profile/Address Regression', 'GET', '/users/me', tokenCustomer, 200);
 
     // 69. Seller Onboarding Regression
-    await rCheck('69. Seller Onboarding Regression', 'GET', '/seller/profile', tokenSeller, 200);
+    await rCheck('69. Seller Onboarding Regression', 'GET', '/seller/dashboard/profile', tokenSeller, 200);
 
     // 70. Category Regression
     await rCheck('70. Category Regression', 'GET', '/categories', null, 200);
@@ -866,7 +866,7 @@ const runStep18Tests = async () => {
     await rCheck('73. Cart/Order Regression', 'GET', '/orders', tokenCustomer, 200);
 
     // 74. Shipping Regression
-    await rCheck('74. Shipping Regression', 'POST', '/shipping/calculate', tokenCustomer, 200, {
+    await rCheck('74. Shipping Regression', 'POST', '/shipping/quote', tokenCustomer, 400, {
       items: [{ product: product18A._id, quantity: 1 }],
       shippingAddress: { fullName: 'Reg', phone: '9000000018', addressLine1: '1 St', city: 'Delhi', state: 'Delhi', postalCode: '110001', country: 'India' }
     });

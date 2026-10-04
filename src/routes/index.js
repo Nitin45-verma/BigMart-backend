@@ -29,6 +29,7 @@ const notificationRoutes = require('./notificationRoutes');
 const reviewRoutes = require('./reviewRoutes');
 const sellerReviewRoutes = require('./sellerReviewRoutes');
 const adminReviewRoutes = require('./adminReviewRoutes');
+const wishlistRoutes = require('./wishlistRoutes');
 
 const router = express.Router();
 
@@ -59,6 +60,7 @@ router.use('/categories', categoryRoutes);
 router.use('/products', productRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/cart', cartRoutes);
+router.use('/wishlist', wishlistRoutes);
 router.use('/orders', orderRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/shipping', shippingRoutes);
