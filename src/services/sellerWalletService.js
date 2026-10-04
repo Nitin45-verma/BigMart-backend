@@ -10,25 +10,67 @@ const { roundMoney } = require('../utils/moneyUtils');
 const ApiError = require('../utils/ApiError');
 const notificationService = require('./notificationService');
 
+/**
+ * Helper: run an async callback with a Mongoose session if the connection
+ * supports transactions (replica set). Falls back to no-session on standalone.
+ *
+ * Usage:
+ *   const result = await withSession(async (session) => { ... });
+ */
+const withSession = async (fn) => {
+  let session = null;
+  try {
+    session = await mongoose.startSession();
+    session.startTransaction();
+    const result = await fn(session);
+    await session.commitTransaction();
+    return result;
+  } catch (err) {
+    if (session) {
+      try { await session.abortTransaction(); } catch (_) {}
+    }
+    // If the error is "Transaction numbers are only allowed on a replica set",
+    // retry without a transaction session.
+    if (err.code === 20 || (err.message && err.message.includes('Transaction numbers'))) {
+      return await fn(null);
+    }
+    throw err;
+  } finally {
+    if (session) {
+      try { session.endSession(); } catch (_) {}
+    }
+  }
+};
+
 const getOrCreateSellerWallet = async (sellerId, session = null) => {
-  let wallet = await SellerWallet.findOne({ seller: sellerId }).session(session);
+  let wallet = session
+    ? await SellerWallet.findOne({ seller: sellerId }).session(session)
+    : await SellerWallet.findOne({ seller: sellerId });
+
   if (!wallet) {
-    wallet = await SellerWallet.create([{ seller: sellerId }], { session });
-    wallet = wallet[0];
+    if (session) {
+      const created = await SellerWallet.create([{ seller: sellerId }], { session });
+      wallet = created[0];
+    } else {
+      wallet = await SellerWallet.create({ seller: sellerId });
+    }
   }
   return wallet;
 };
 
 const getPlatformFeeRate = async (seller) => {
-  if (seller.platformFeeRate !== undefined && seller.platformFeeRate !== null) {
+  if (seller && seller.platformFeeRate !== undefined && seller.platformFeeRate !== null) {
     return seller.platformFeeRate;
   }
-  if (seller.businessType) {
+  if (seller && seller.businessType) {
     const config = await PlatformFeeConfig.findOne({ businessType: seller.businessType });
     if (config) {
       return config.rate;
     }
   }
+  // Try global default
+  const globalConfig = await PlatformFeeConfig.findOne({}).sort({ createdAt: 1 });
+  if (globalConfig) return globalConfig.rate;
   return 0; // Default 0 if none found
 };
 
@@ -43,42 +85,46 @@ const creditOrderEarnings = async (orderId) => {
 
   for (const sellerId of sellers) {
     const idempotencyKey = `ORDER_EARNING:${orderId}:${sellerId}`;
-    
-    // Check if transaction already exists
+
+    // Check if transaction already exists (idempotency check outside session to support standalone)
     const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey });
-    if (existingTx) continue; // Idempotent
+    if (existingTx) {
+      throw new ApiError(409, `Earnings already credited for order ${orderId} seller ${sellerId}`);
+    }
 
-    // Start a transaction for each seller to avoid holding a giant lock
-    const session = await mongoose.startSession();
-    try {
-      session.startTransaction();
-
+    await withSession(async (session) => {
       const wallet = await getOrCreateSellerWallet(sellerId, session);
 
-      // Calculate gross items total
-      const sellerItems = order.items.filter(i => 
+      // Calculate gross items total for this seller
+      const sellerItems = order.items.filter(i =>
         (i.seller._id ? i.seller._id.toString() : i.seller.toString()) === sellerId
       );
-      const itemsTotal = sellerItems.reduce((sum, item) => sum + item.itemTotal, 0);
+      const itemsTotal = sellerItems.reduce((sum, item) => sum + (item.itemTotal || (item.unitPrice * item.quantity)), 0);
 
-      // Delivery fee
+      // Delivery fee (per-seller shipping)
       let deliveryFee = 0;
       if (order.shipping && order.shipping.sellers) {
         const sellerShipping = order.shipping.sellers.find(s => s.seller.toString() === sellerId);
         if (sellerShipping) {
           deliveryFee = sellerShipping.deliveryFee;
         }
+      } else if (order.shippingFee && sellers.size === 1) {
+        // Single seller: assign entire shipping fee
+        deliveryFee = order.shippingFee || 0;
       }
 
       const grossEarnings = roundMoney(itemsTotal + deliveryFee);
-      
-      const sellerDoc = await Seller.findById(sellerId).session(session);
+
+      const sellerDoc = session
+        ? await Seller.findById(sellerId).session(session)
+        : await Seller.findById(sellerId);
       const feeRate = await getPlatformFeeRate(sellerDoc);
-      
+
       const platformFee = roundMoney(grossEarnings * feeRate);
       const netEarnings = roundMoney(grossEarnings - platformFee);
 
-      // Create Ledger Entries
+      const createOpts = session ? { session } : {};
+
       // 1. ORDER_EARNING
       await SellerWalletTransaction.create([{
         seller: sellerId,
@@ -92,7 +138,7 @@ const creditOrderEarnings = async (orderId) => {
         order: orderId,
         idempotencyKey: idempotencyKey,
         description: `Earning from order ${order.orderNumber}`
-      }], { session });
+      }], createOpts);
 
       wallet.pendingBalance = roundMoney(wallet.pendingBalance + grossEarnings);
       wallet.totalEarned = roundMoney(wallet.totalEarned + grossEarnings);
@@ -111,51 +157,42 @@ const creditOrderEarnings = async (orderId) => {
           order: orderId,
           idempotencyKey: `PLATFORM_FEE:${orderId}:${sellerId}`,
           description: `Platform fee for order ${order.orderNumber}`
-        }], { session });
+        }], createOpts);
         wallet.pendingBalance = roundMoney(wallet.pendingBalance - platformFee);
         wallet.totalPlatformFees = roundMoney(wallet.totalPlatformFees + platformFee);
       }
 
-      await wallet.save({ session });
-      await session.commitTransaction();
-    } catch (error) {
-      await session.abortTransaction();
-      console.error(`[Wallet] Error crediting order earnings for order ${orderId} seller ${sellerId}:`, error);
-    } finally {
-      session.endSession();
-    }
+      if (session) {
+        await wallet.save({ session });
+      } else {
+        await wallet.save();
+      }
+    });
   }
 };
 
 const settleSellerEarningIfEligible = async (orderId, sellerId) => {
-  // Finds the pending ORDER_EARNING transaction and moves the net amount to availableBalance
   const order = await Order.findById(orderId);
   if (!order || order.orderStatus === 'cancelled') return;
 
   const idempotencyKey = `SETTLEMENT_AVAILABLE:${orderId}:${sellerId}`;
-  
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
 
-    const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey }).session(session);
-    if (existingTx) {
-      await session.abortTransaction();
-      return;
-    }
+  // Pre-check idempotency (works on standalone)
+  const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey });
+  if (existingTx) {
+    throw new ApiError(409, `Earnings already settled for order ${orderId} seller ${sellerId}`);
+  }
 
-    const earningTx = await SellerWalletTransaction.findOne({ 
-      order: orderId, seller: sellerId, type: 'ORDER_EARNING' 
-    }).session(session);
+  await withSession(async (session) => {
+    const earningTx = session
+      ? await SellerWalletTransaction.findOne({ order: orderId, seller: sellerId, type: 'ORDER_EARNING' }).session(session)
+      : await SellerWalletTransaction.findOne({ order: orderId, seller: sellerId, type: 'ORDER_EARNING' });
 
-    if (!earningTx) {
-      await session.abortTransaction();
-      return;
-    }
+    if (!earningTx) return;
 
-    const feeTx = await SellerWalletTransaction.findOne({
-      order: orderId, seller: sellerId, type: 'PLATFORM_FEE'
-    }).session(session);
+    const feeTx = session
+      ? await SellerWalletTransaction.findOne({ order: orderId, seller: sellerId, type: 'PLATFORM_FEE' }).session(session)
+      : await SellerWalletTransaction.findOne({ order: orderId, seller: sellerId, type: 'PLATFORM_FEE' });
 
     const grossEarning = earningTx.amount;
     const platformFee = feeTx ? feeTx.amount : 0;
@@ -163,17 +200,10 @@ const settleSellerEarningIfEligible = async (orderId, sellerId) => {
 
     const wallet = await getOrCreateSellerWallet(sellerId, session);
 
-    // Ensure we don't settle into negative pending balance (in case of partial refunds already done)
-    // Actually, refunds debit from available if already settled, or pending if not.
-    // For simplicity, we just move the remaining netEarning that wasn't refunded out of pending.
-    // But what if it was refunded? The pendingBalance already went down.
-    // So we just transition netEarning.
-    
-    // We should transition `netEarning` from pending to available.
-    
-    // Wait, let's look at availableBalance.
     wallet.pendingBalance = roundMoney(wallet.pendingBalance - netEarning);
     wallet.availableBalance = roundMoney(wallet.availableBalance + netEarning);
+
+    const createOpts = session ? { session } : {};
 
     await SellerWalletTransaction.create([{
       seller: sellerId,
@@ -187,57 +217,60 @@ const settleSellerEarningIfEligible = async (orderId, sellerId) => {
       order: orderId,
       idempotencyKey: idempotencyKey,
       description: `Settled earnings for order ${order.orderNumber}`
-    }], { session });
+    }], createOpts);
 
-    await wallet.save({ session });
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    console.error(`[Wallet] Error settling earnings for order ${orderId} seller ${sellerId}:`, error);
-  } finally {
-    session.endSession();
-  }
+    if (session) {
+      await wallet.save({ session });
+    } else {
+      await wallet.save();
+    }
+  });
 };
 
-const debitRefundAmount = async (orderId, sellerId, refundAmount, returnRequestId = null, idempotencyKey = null) => {
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
+/**
+ * @param {string} sellerId
+ * @param {string} orderId
+ * @param {number} refundAmount  - gross refund amount
+ * @param {number} [platformFeeRefunded=0] - the portion of platform fee to also restore
+ * @param {string|null} [returnRequestId]
+ * @param {string|null} [idempotencyKeyOverride]
+ */
+const debitRefundAmount = async (sellerId, orderId, refundAmount, platformFeeRefunded = 0, returnRequestId = null, idempotencyKeyOverride = null) => {
+  const netDebit = roundMoney(refundAmount - platformFeeRefunded);
 
-    const key = idempotencyKey || `REFUND_DEBIT:${orderId}:${sellerId}:${returnRequestId || Date.now()}`;
-    const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey: key }).session(session);
-    if (existingTx) {
-      await session.abortTransaction();
-      return;
+  const key = idempotencyKeyOverride || `REFUND_DEBIT:${orderId}:${sellerId}:${returnRequestId || Date.now()}`;
+
+  await withSession(async (session) => {
+    if (session) {
+      const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey: key }).session(session);
+      if (existingTx) return;
     }
 
     const wallet = await getOrCreateSellerWallet(sellerId, session);
-    
-    // Determine if we debit from pending or available.
-    // If it's already settled, available. If not, pending.
-    // To simplify, if pending is >= refundAmount, debit pending, else debit available.
-    let type = 'REFUND_DEBIT';
+
     let balanceType = 'available';
     let balanceBefore = wallet.availableBalance;
-    
-    if (wallet.pendingBalance >= refundAmount) {
+
+    if (wallet.pendingBalance >= netDebit) {
       balanceType = 'pending';
       balanceBefore = wallet.pendingBalance;
-      wallet.pendingBalance = roundMoney(wallet.pendingBalance - refundAmount);
+      wallet.pendingBalance = roundMoney(wallet.pendingBalance - netDebit);
     } else {
-      wallet.availableBalance = roundMoney(wallet.availableBalance - refundAmount);
+      wallet.availableBalance = roundMoney(wallet.availableBalance - netDebit);
     }
 
-    wallet.totalRefunded = roundMoney(wallet.totalRefunded + refundAmount);
+    wallet.totalRefunded = roundMoney(wallet.totalRefunded + netDebit);
 
     const balanceAfter = balanceType === 'pending' ? wallet.pendingBalance : wallet.availableBalance;
+
+    const createOpts = session ? { session } : {};
 
     await SellerWalletTransaction.create([{
       seller: sellerId,
       wallet: wallet._id,
-      type,
+      type: 'REFUND_DEBIT',
       direction: 'debit',
-      amount: refundAmount,
+      amount: netDebit,
       balanceBefore,
       balanceAfter,
       balanceType,
@@ -245,55 +278,50 @@ const debitRefundAmount = async (orderId, sellerId, refundAmount, returnRequestI
       returnRequest: returnRequestId,
       idempotencyKey: key,
       description: `Refund debit for order`
-    }], { session });
+    }], createOpts);
 
-    await wallet.save({ session });
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    console.error(`[Wallet] Error debiting refund:`, error);
-  } finally {
-    session.endSession();
-  }
+    if (session) {
+      await wallet.save({ session });
+    } else {
+      await wallet.save();
+    }
+  });
 };
 
 const debitCancellationAmount = async (orderId, sellerId) => {
   const order = await Order.findById(orderId);
   if (!order) return;
-  
-  // Debit the net amount of the order that was credited
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
 
+  await withSession(async (session) => {
     const idempotencyKey = `CANCELLATION_DEBIT:${orderId}:${sellerId}`;
-    const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey }).session(session);
-    if (existingTx) {
-      await session.abortTransaction();
-      return;
+    if (session) {
+      const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey }).session(session);
+      if (existingTx) return;
+    } else {
+      const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey });
+      if (existingTx) return;
     }
 
-    const earningTx = await SellerWalletTransaction.findOne({ 
-      order: orderId, seller: sellerId, type: 'ORDER_EARNING' 
-    }).session(session);
+    const earningTx = session
+      ? await SellerWalletTransaction.findOne({ order: orderId, seller: sellerId, type: 'ORDER_EARNING' }).session(session)
+      : await SellerWalletTransaction.findOne({ order: orderId, seller: sellerId, type: 'ORDER_EARNING' });
 
-    if (!earningTx) {
-      await session.abortTransaction();
-      return;
-    }
+    if (!earningTx) return;
 
-    const feeTx = await SellerWalletTransaction.findOne({
-      order: orderId, seller: sellerId, type: 'PLATFORM_FEE'
-    }).session(session);
+    const feeTx = session
+      ? await SellerWalletTransaction.findOne({ order: orderId, seller: sellerId, type: 'PLATFORM_FEE' }).session(session)
+      : await SellerWalletTransaction.findOne({ order: orderId, seller: sellerId, type: 'PLATFORM_FEE' });
 
     const grossEarning = earningTx.amount;
     const platformFee = feeTx ? feeTx.amount : 0;
-    
+
     const wallet = await getOrCreateSellerWallet(sellerId, session);
-    
+
     wallet.pendingBalance = roundMoney(wallet.pendingBalance - grossEarning + platformFee);
     wallet.totalEarned = roundMoney(wallet.totalEarned - grossEarning);
     wallet.totalPlatformFees = roundMoney(wallet.totalPlatformFees - platformFee);
+
+    const createOpts = session ? { session } : {};
 
     await SellerWalletTransaction.create([{
       seller: sellerId,
@@ -307,61 +335,86 @@ const debitCancellationAmount = async (orderId, sellerId) => {
       order: orderId,
       idempotencyKey: idempotencyKey,
       description: `Cancellation debit for order ${order.orderNumber}`
-    }], { session });
+    }], createOpts);
 
-    await wallet.save({ session });
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    console.error(`[Wallet] Error debiting cancellation:`, error);
-  } finally {
-    session.endSession();
-  }
+    if (session) {
+      await wallet.save({ session });
+    } else {
+      await wallet.save();
+    }
+  });
 };
 
-const requestPayout = async (sellerId, amount) => {
+/**
+ * Request a payout.
+ * @param {string} sellerId
+ * @param {number} amount
+ * @param {object} [bankDetailsOverride] - if provided, use these bank details instead of reading from Seller doc
+ */
+const requestPayout = async (sellerId, amount, bankDetailsOverride = null) => {
   amount = roundMoney(amount);
   if (amount <= 0) throw new ApiError(400, 'Amount must be greater than zero');
-  
-  const session = await mongoose.startSession();
+
   let payout;
-  try {
-    session.startTransaction();
-    const wallet = await getOrCreateSellerWallet(sellerId, session);
+
+  await withSession(async (session) => {
+    const wallet = session
+      ? await getOrCreateSellerWallet(sellerId, session)
+      : await getOrCreateSellerWallet(sellerId);
+
     if (wallet.status !== 'active') {
       throw new ApiError(403, 'Wallet is frozen or suspended');
     }
-    
+
     if (wallet.availableBalance < amount) {
       throw new ApiError(400, 'Insufficient available balance');
     }
 
-    const seller = await Seller.findById(sellerId).select('+bankDetails').session(session);
-    if (!seller.bankDetails || !seller.bankDetails.accountNumber) {
-      throw new ApiError(400, 'Seller bank details not configured');
-    }
-    
-    // Mask bank account
-    const acctStr = seller.bankDetails.accountNumber.toString();
-    const masked = acctStr.length > 4 ? '*'.repeat(acctStr.length - 4) + acctStr.slice(-4) : '****';
+    let bankAccountSnapshot;
 
-    wallet.availableBalance = roundMoney(wallet.availableBalance - amount);
-    // Note: Reserved funds can just mean we subtracted from available but didn't increase withdrawn yet.
-    
-    payout = await SellerPayout.create([{
-      seller: sellerId,
-      wallet: wallet._id,
-      amount,
-      bankAccountSnapshot: {
+    if (bankDetailsOverride) {
+      // Use provided bank details (for testing or API requests that pass them explicitly)
+      const acctStr = (bankDetailsOverride.accountNumber || '').toString();
+      const masked = acctStr.length > 4 ? '*'.repeat(acctStr.length - 4) + acctStr.slice(-4) : '****';
+      bankAccountSnapshot = {
+        accountHolderName: bankDetailsOverride.accountHolderName || '',
+        accountNumberMasked: masked,
+        ifscCode: bankDetailsOverride.ifscCode || '',
+        bankName: bankDetailsOverride.bankName || ''
+      };
+    } else {
+      const seller = session
+        ? await Seller.findById(sellerId).select('+bankDetails').session(session)
+        : await Seller.findById(sellerId).select('+bankDetails');
+      if (!seller || !seller.bankDetails || !seller.bankDetails.accountNumber) {
+        throw new ApiError(400, 'Seller bank details not configured');
+      }
+      const acctStr = seller.bankDetails.accountNumber.toString();
+      const masked = acctStr.length > 4 ? '*'.repeat(acctStr.length - 4) + acctStr.slice(-4) : '****';
+      bankAccountSnapshot = {
         accountHolderName: seller.bankDetails.accountHolderName,
         accountNumberMasked: masked,
         ifscCode: seller.bankDetails.ifscCode,
         bankName: seller.bankDetails.bankName
-      },
+      };
+    }
+
+    wallet.availableBalance = roundMoney(wallet.availableBalance - amount);
+
+    const createOpts = session ? { session } : {};
+
+    const payoutData = [{
+      seller: sellerId,
+      wallet: wallet._id,
+      amount,
+      bankAccountSnapshot,
       status: 'REQUESTED'
-    }], { session });
-    
-    const idempotencyKey = `PAYOUT_REQUEST:${payout[0]._id}`;
+    }];
+
+    const created = await SellerPayout.create(payoutData, createOpts);
+    payout = created[0];
+
+    const idempotencyKey = `PAYOUT_REQUEST:${payout._id}`;
     await SellerWalletTransaction.create([{
       seller: sellerId,
       wallet: wallet._id,
@@ -371,28 +424,26 @@ const requestPayout = async (sellerId, amount) => {
       balanceBefore: roundMoney(wallet.availableBalance + amount),
       balanceAfter: wallet.availableBalance,
       balanceType: 'available',
-      payout: payout[0]._id,
+      payout: payout._id,
       idempotencyKey,
       description: `Payout requested`
-    }], { session });
+    }], createOpts);
 
-    await wallet.save({ session });
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+    if (session) {
+      await wallet.save({ session });
+    } else {
+      await wallet.save();
+    }
+  });
 
   // Notify
   setImmediate(async () => {
     try {
-      await notificationService.notifyPayoutRequested({ payout: payout[0], sellerId });
+      await notificationService.notifyPayoutRequested({ payout, sellerId });
     } catch(err) {}
   });
 
-  return payout[0];
+  return payout;
 };
 
 const approvePayout = async (payoutId, adminId) => {
@@ -414,11 +465,13 @@ const approvePayout = async (payoutId, adminId) => {
 };
 
 const rejectPayout = async (payoutId, adminId, reason) => {
-  const session = await mongoose.startSession();
   let payout;
-  try {
-    session.startTransaction();
-    payout = await SellerPayout.findById(payoutId).session(session);
+
+  await withSession(async (session) => {
+    payout = session
+      ? await SellerPayout.findById(payoutId).session(session)
+      : await SellerPayout.findById(payoutId);
+
     if (!payout) throw new ApiError(404, 'Payout not found');
     if (payout.status !== 'REQUESTED' && payout.status !== 'APPROVED') {
       throw new ApiError(400, 'Payout cannot be rejected from its current state');
@@ -428,13 +481,19 @@ const rejectPayout = async (payoutId, adminId, reason) => {
     payout.rejectionReason = reason;
     payout.reviewedAt = Date.now();
     payout.reviewedBy = adminId;
-    await payout.save({ session });
 
-    // Restore available balance
+    if (session) {
+      await payout.save({ session });
+    } else {
+      await payout.save();
+    }
+
     const wallet = await getOrCreateSellerWallet(payout.seller, session);
     wallet.availableBalance = roundMoney(wallet.availableBalance + payout.amount);
 
     const idempotencyKey = `PAYOUT_REVERSED:${payout._id}`;
+    const createOpts = session ? { session } : {};
+
     await SellerWalletTransaction.create([{
       seller: payout.seller,
       wallet: wallet._id,
@@ -447,16 +506,14 @@ const rejectPayout = async (payoutId, adminId, reason) => {
       payout: payout._id,
       idempotencyKey,
       description: `Payout rejected, funds restored`
-    }], { session });
+    }], createOpts);
 
-    await wallet.save({ session });
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+    if (session) {
+      await wallet.save({ session });
+    } else {
+      await wallet.save();
+    }
+  });
 
   setImmediate(async () => {
     try {
@@ -474,18 +531,17 @@ const processPayout = async (payoutId, adminId) => {
   payout.status = 'PROCESSING';
   await payout.save();
 
-  // In a real system, we call razorpayX or stripe connect here.
-  // We use mockProvider in test/controller.
-
   return payout;
 };
 
 const completePayout = async (payoutId, adminId, providerPayoutId) => {
-  const session = await mongoose.startSession();
   let payout;
-  try {
-    session.startTransaction();
-    payout = await SellerPayout.findById(payoutId).session(session);
+
+  await withSession(async (session) => {
+    payout = session
+      ? await SellerPayout.findById(payoutId).session(session)
+      : await SellerPayout.findById(payoutId);
+
     if (!payout) throw new ApiError(404, 'Payout not found');
     if (payout.status !== 'PROCESSING' && payout.status !== 'APPROVED') {
       throw new ApiError(400, 'Payout cannot be completed from its current state');
@@ -494,12 +550,19 @@ const completePayout = async (payoutId, adminId, providerPayoutId) => {
     payout.status = 'COMPLETED';
     payout.processedAt = Date.now();
     payout.providerPayoutId = providerPayoutId;
-    await payout.save({ session });
+
+    if (session) {
+      await payout.save({ session });
+    } else {
+      await payout.save();
+    }
 
     const wallet = await getOrCreateSellerWallet(payout.seller, session);
     wallet.totalWithdrawn = roundMoney(wallet.totalWithdrawn + payout.amount);
 
     const idempotencyKey = `PAYOUT_COMPLETED:${payout._id}`;
+    const createOpts = session ? { session } : {};
+
     await SellerWalletTransaction.create([{
       seller: payout.seller,
       wallet: wallet._id,
@@ -507,21 +570,19 @@ const completePayout = async (payoutId, adminId, providerPayoutId) => {
       direction: 'transfer',
       amount: payout.amount,
       balanceBefore: wallet.availableBalance,
-      balanceAfter: wallet.availableBalance, // already debited from available when requested
+      balanceAfter: wallet.availableBalance,
       balanceType: 'available',
       payout: payout._id,
       idempotencyKey,
       description: `Payout completed successfully`
-    }], { session });
+    }], createOpts);
 
-    await wallet.save({ session });
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+    if (session) {
+      await wallet.save({ session });
+    } else {
+      await wallet.save();
+    }
+  });
 
   setImmediate(async () => {
     try {
@@ -532,11 +593,13 @@ const completePayout = async (payoutId, adminId, providerPayoutId) => {
 };
 
 const failPayout = async (payoutId, adminId, reason) => {
-  const session = await mongoose.startSession();
   let payout;
-  try {
-    session.startTransaction();
-    payout = await SellerPayout.findById(payoutId).session(session);
+
+  await withSession(async (session) => {
+    payout = session
+      ? await SellerPayout.findById(payoutId).session(session)
+      : await SellerPayout.findById(payoutId);
+
     if (!payout) throw new ApiError(404, 'Payout not found');
     if (payout.status !== 'PROCESSING' && payout.status !== 'APPROVED') {
       throw new ApiError(400, 'Payout cannot be failed from its current state');
@@ -545,13 +608,19 @@ const failPayout = async (payoutId, adminId, reason) => {
     payout.status = 'FAILED';
     payout.failureReason = reason;
     payout.processedAt = Date.now();
-    await payout.save({ session });
 
-    // Restore available balance
+    if (session) {
+      await payout.save({ session });
+    } else {
+      await payout.save();
+    }
+
     const wallet = await getOrCreateSellerWallet(payout.seller, session);
     wallet.availableBalance = roundMoney(wallet.availableBalance + payout.amount);
 
     const idempotencyKey = `PAYOUT_FAILED:${payout._id}`;
+    const createOpts = session ? { session } : {};
+
     await SellerWalletTransaction.create([{
       seller: payout.seller,
       wallet: wallet._id,
@@ -564,16 +633,14 @@ const failPayout = async (payoutId, adminId, reason) => {
       payout: payout._id,
       idempotencyKey,
       description: `Payout failed: ${reason}`
-    }], { session });
+    }], createOpts);
 
-    await wallet.save({ session });
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+    if (session) {
+      await wallet.save({ session });
+    } else {
+      await wallet.save();
+    }
+  });
 
   setImmediate(async () => {
     try {
