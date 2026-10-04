@@ -17,7 +17,7 @@ const adminAuditLogSchema = new mongoose.Schema(
     targetType: {
       type: String,
       required: [true, 'Target type is required'],
-      enum: ['User', 'Seller', 'Product', 'Order', 'ReturnRequest', 'Category', 'PlatformFeeConfig', 'ProductReview', 'System', 'Coupon'],
+      enum: ['User', 'Seller', 'Product', 'Order', 'ReturnRequest', 'Category', 'PlatformFeeConfig', 'ProductReview', 'System', 'Coupon', 'SupportTicket'],
       index: true
     },
     targetId: {
