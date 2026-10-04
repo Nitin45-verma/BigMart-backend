@@ -1,4 +1,5 @@
 const productService = require('../services/productService');
+const productSearchService = require('../services/productSearchService');
 
 /**
  * Seller: Create product
@@ -83,14 +84,21 @@ const deleteSellerProduct = async (req, res, next) => {
  */
 const getPublicProducts = async (req, res, next) => {
   try {
-    const { q, categorySlug, brand, minPrice, maxPrice, minStock, sort, page, limit } = req.query;
-    const result = await productService.getPublicProducts({
+    const { q, categorySlug, categoryId, subCategory, brand, seller, minPrice, maxPrice, minRating, maxRating, inStock, minDiscount, sort, page, limit } = req.query;
+    const result = await productSearchService.getPublicProducts({
       q,
       categorySlug,
+      categoryId,
+      subCategory,
       brand,
+      seller,
       minPrice,
       maxPrice,
-      minStock,
+      minRating,
+      maxRating,
+      inStock,
+      minStock: req.query.minStock, // fallback
+      minDiscount,
       sort,
       page,
       limit
@@ -110,7 +118,7 @@ const getPublicProducts = async (req, res, next) => {
 const getPublicProductsByCategorySlug = async (req, res, next) => {
   try {
     const { page, limit, sort, minPrice, maxPrice, brand } = req.query;
-    const result = await productService.getPublicProducts({
+    const result = await productSearchService.getPublicProducts({
       categorySlug: req.params.categorySlug,
       brand,
       minPrice,
@@ -133,7 +141,7 @@ const getPublicProductsByCategorySlug = async (req, res, next) => {
  */
 const getPublicProductBySlug = async (req, res, next) => {
   try {
-    const product = await productService.getPublicProductBySlug(req.params.slug);
+    const product = await productSearchService.getPublicProductBySlug(req.params.slug);
     res.status(200).json({
       success: true,
       data: { product }

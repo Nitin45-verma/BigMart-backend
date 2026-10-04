@@ -1,5 +1,6 @@
 const express = require('express');
 const productController = require('../controllers/productController');
+const { validateProductSearch } = require('../validators/productSearchValidator');
 
 const reviewController = require('../controllers/reviewController');
 const { authenticate } = require('../middleware/authMiddleware');
@@ -9,8 +10,8 @@ const { requireEmailVerified } = require('../middleware/verificationMiddleware')
 const router = express.Router();
 
 // Public product catalog endpoints (no authentication required)
-router.get('/', productController.getPublicProducts);
-router.get('/category/:categorySlug', productController.getPublicProductsByCategorySlug);
+router.get('/', validateProductSearch, productController.getPublicProducts);
+router.get('/category/:categorySlug', validateProductSearch, productController.getPublicProductsByCategorySlug);
 
 // Product Review endpoints
 router.post(

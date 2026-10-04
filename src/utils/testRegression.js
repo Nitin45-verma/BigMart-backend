@@ -4,7 +4,7 @@ const { execSync } = require('child_process');
 
 const runRegression = () => {
   const utilsDir = __dirname;
-  const files = fs.readdirSync(utilsDir).filter(f => f.startsWith('test') && f.endsWith('.js') && f !== 'testCoupons.js' && f !== 'testRegression.js');
+  const files = fs.readdirSync(utilsDir).filter(f => f.startsWith('test') && f.endsWith('.js') && f !== 'testRegression.js');
   
   let passed = 0;
   let failed = 0;
