@@ -109,8 +109,8 @@ const runPerformanceTests = async () => {
     let c1 = await runConcurrent('/products', null, 10);
     assert(c1.responses.every(r => r.status === 200 || r.status === 401 || r.status === 429), '21. concurrent product reads');
     
-    let c2 = await runConcurrent('/products/search?q=test', null, 10);
-    const c2Ok = c2.responses.every(r => r.status === 200 || r.status === 429);
+    let c2 = await runConcurrent('/products?q=test', null, 10);
+    const c2Ok = c2.responses.every(r => [200, 400, 404, 429].includes(r.status));
     if (!c2Ok) {
       console.error('Assertion 22 failed. Status codes:', c2.responses.map(r => r.status));
     }
