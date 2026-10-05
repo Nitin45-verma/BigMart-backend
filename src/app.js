@@ -21,10 +21,18 @@ const app = express();
 configurePassport();
 
 // Security HTTP headers
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin images if necessary, otherwise tighten
+}));
 
 // Enable CORS
-app.use(cors());
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
 
 // Parse cookie headers
 app.use(cookieParser());
@@ -32,11 +40,17 @@ app.use(cookieParser());
 // Initialize Passport middleware
 app.use(passport.initialize());
 
-// Parse JSON payload
-app.use(express.json());
+// Parse JSON payload (with safe limit)
+app.use(express.json({ limit: '1mb' }));
 
 // Parse URL-encoded body
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Health Check Endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ success: true, message: 'Server is healthy' });
+});
+
 
 // HTTP logging in development environment
 if (process.env.NODE_ENV === 'development') {

@@ -32,17 +32,37 @@ const startServer = async () => {
 // Handle unhandled promise rejections cleanly
 process.on('unhandledRejection', (reason) => {
   console.error('[Server] Unhandled Rejection:', reason?.message || reason);
-  if (server) {
-    server.close(() => process.exit(1));
-  } else {
-    process.exit(1);
-  }
+  gracefulShutdown(1);
 });
 
 // Handle uncaught exceptions cleanly
 process.on('uncaughtException', (error) => {
   console.error('[Server] Uncaught Exception:', error.message);
-  process.exit(1);
+  gracefulShutdown(1);
 });
+
+// Graceful shutdown logic
+const gracefulShutdown = async (exitCode = 0) => {
+  console.log('[Server] Initiating graceful shutdown...');
+  if (server) {
+    server.close(async () => {
+      console.log('[Server] HTTP server closed.');
+      try {
+        const mongoose = require('mongoose');
+        await mongoose.connection.close();
+        console.log('[MongoDB] Connection closed.');
+        process.exit(exitCode);
+      } catch (err) {
+        console.error('[MongoDB] Error closing connection:', err);
+        process.exit(exitCode);
+      }
+    });
+  } else {
+    process.exit(exitCode);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown(0));
+process.on('SIGINT', () => gracefulShutdown(0));
 
 startServer();
