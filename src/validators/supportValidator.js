@@ -14,7 +14,7 @@ const PROTECTED_TICKET_FIELDS = [
 ];
 
 const PROTECTED_MESSAGE_FIELDS = [
-  'sender', 'senderRole', 'isInternal', 'ticket'
+  'sender', 'senderRole', 'ticket'
 ];
 
 /**

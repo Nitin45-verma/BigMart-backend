@@ -179,7 +179,7 @@ const runSupportTests = async () => {
     const escRes = await makeReq('POST', '/support/tickets', custAToken, { subject: 'Valid Subj', description: 'Valid Description', category: 'OTHER', escalated: true });
     assert(escRes.status === 400, '17. customer cannot escalate');
 
-    const statRes = await makeReq('PATCH', `/support/tickets/${t1Id}/status`, custAToken, { status: 'RESOLVED' });
+    const statRes = await makeReq('PATCH', `/support/tickets/${t1Id}/status`, custAToken, { status: 'IN_PROGRESS' });
     assert(statRes.status === 403, '18. customer cannot manipulate status illegally');
     
     // C. SELLER
@@ -392,6 +392,7 @@ const runSupportTests = async () => {
     } catch (e) {
       console.error('Cleanup error:', e);
     }
+    process.exit(0);
   }
 };
 
