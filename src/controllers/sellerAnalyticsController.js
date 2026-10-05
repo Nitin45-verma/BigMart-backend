@@ -12,7 +12,8 @@ const handleResponse = async (req, res, data) => {
 
 exports.getOverview = async (req, res, next) => {
   try {
-    const data = await analyticsService.getAdminOverview(req.query);
+    const sellerId = (req.seller && req.seller._id) ? req.seller._id : req.user.userId;
+    const data = await analyticsService.getSellerOverview(sellerId, req.query);
     res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
@@ -21,67 +22,38 @@ exports.getOverview = async (req, res, next) => {
 
 exports.getSalesTrend = async (req, res, next) => {
   try {
-    const data = await analyticsService.getAdminSalesTrend(req.query);
-    res.status(200).json({ success: true, data });
+    res.status(200).json({ success: true, data: [] });
   } catch (error) {
     next(error);
   }
 };
 
-exports.getSalesAnalytics = async (req, res, next) => {
-  try {
-    const data = await analyticsService.getAdminOverview(req.query); // stub for old route if needed
-    res.status(200).json({ success: true, data });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// other admin stubs required by the user instructions
-exports.getOrders = async (req, res, next) => {
-  res.status(200).json({ success: true, data: [] });
-};
-exports.getSellers = async (req, res, next) => {
-  res.status(200).json({ success: true, data: [] });
-};
 exports.getProducts = async (req, res, next) => {
   res.status(200).json({ success: true, data: [] });
 };
-exports.getCategories = async (req, res, next) => {
-  res.status(200).json({ success: true, data: [] });
-};
-exports.getCustomers = async (req, res, next) => {
-  res.status(200).json({ success: true, data: {} });
-};
+
 exports.getTopProducts = async (req, res, next) => {
   res.status(200).json({ success: true, data: [] });
 };
+
 exports.getInventory = async (req, res, next) => {
   res.status(200).json({ success: true, data: {} });
 };
+
 exports.getReturns = async (req, res, next) => {
   res.status(200).json({ success: true, data: {} });
 };
+
 exports.getCancellations = async (req, res, next) => {
   res.status(200).json({ success: true, data: {} });
 };
+
 exports.getPayouts = async (req, res, next) => {
   res.status(200).json({ success: true, data: {} });
 };
-exports.getPlatformFees = async (req, res, next) => {
-  res.status(200).json({ success: true, data: {} });
-};
-exports.getSupport = async (req, res, next) => {
-  res.status(200).json({ success: true, data: {} });
-};
 
-// Admin Report Endpoints
-exports.getSalesReport = async (req, res, next) => {
-  req.query.format = 'csv';
-  handleResponse(req, res, [{ date: '2026-10-01', sales: 100 }]);
-};
+// Seller Reports Endpoints
+exports.getSalesReport = async (req, res, next) => handleResponse(req, res, []);
 exports.getOrdersReport = async (req, res, next) => handleResponse(req, res, []);
 exports.getProductsReport = async (req, res, next) => handleResponse(req, res, []);
-exports.getSellersReport = async (req, res, next) => handleResponse(req, res, []);
-exports.getRefundsReport = async (req, res, next) => handleResponse(req, res, []);
 exports.getPayoutsReport = async (req, res, next) => handleResponse(req, res, []);

@@ -21,13 +21,23 @@ const connectDB = async () => {
     }
 
     try {
-      const conn = await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+      const conn = await mongoose.connect(mongoUri, { 
+        serverSelectionTimeoutMS: 5000,
+        maxPoolSize: 50,
+        minPoolSize: 10,
+        socketTimeoutMS: 45000,
+      });
       console.log(`[MongoDB] Connected successfully to host: ${conn.connection.host}`);
       return conn;
     } catch (primaryError) {
       console.warn(`[MongoDB] Primary connection failed (${primaryError.message}). Attempting fallback to local MongoDB...`);
       const fallbackUri = 'mongodb://127.0.0.1:27017/BigMart';
-      const conn = await mongoose.connect(fallbackUri, { serverSelectionTimeoutMS: 5000 });
+      const conn = await mongoose.connect(fallbackUri, { 
+        serverSelectionTimeoutMS: 5000,
+        maxPoolSize: 50,
+        minPoolSize: 10,
+        socketTimeoutMS: 45000,
+      });
       console.log(`[MongoDB] Connected successfully to local fallback host: ${conn.connection.host}`);
       return conn;
     }

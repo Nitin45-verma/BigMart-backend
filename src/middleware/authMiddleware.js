@@ -1,11 +1,12 @@
 const ApiError = require('../utils/ApiError');
 const { verifyAccessToken } = require('../utils/tokenUtils');
+const User = require('../models/User');
 
 /**
  * Authentication Middleware: Verifies Bearer JWT access token
- * and attaches user info (userId, role) to req.user.
+ * and attaches user info (userId, role) to req.user after checking DB.
  */
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -19,10 +20,16 @@ const authenticate = (req, res, next) => {
     }
 
     const decoded = verifyAccessToken(token);
+    
+    // Check if user still exists and hasn't been blocked
+    const user = await User.findById(decoded.userId).select('role isBlocked');
+    if (!user || user.isBlocked) {
+       throw new ApiError(401, 'User no longer exists or is blocked');
+    }
 
     req.user = {
-      userId: decoded.userId,
-      role: decoded.role
+      userId: user._id.toString(),
+      role: user.role
     };
 
     next();

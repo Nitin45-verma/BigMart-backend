@@ -23,7 +23,7 @@ const generateAccessToken = (user) => {
  */
 const verifyAccessToken = (token) => {
   const secret = process.env.JWT_ACCESS_SECRET || 'default_dev_access_secret_change_me';
-  return jwt.verify(token, secret);
+  return jwt.verify(token, secret, { algorithms: ['HS256'] });
 };
 
 /**

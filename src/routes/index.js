@@ -44,6 +44,10 @@ const supportRoutes = require('./supportRoutes');
 const adminSupportRoutes = require('./adminSupportRoutes');
 const sellerSupportRoutes = require('./sellerSupportRoutes');
 
+const sellerAnalyticsRoutes = require('./sellerAnalyticsRoutes');
+const adminReportRoutes = require('./adminReportRoutes');
+const sellerReportRoutes = require('./sellerReportRoutes');
+
 const router = express.Router();
 
 // Register v1 routes
@@ -59,7 +63,10 @@ router.use('/seller/returns', sellerReturnRoutes);
 router.use('/seller/reviews', sellerReviewRoutes);
 router.use('/seller/wallet', sellerWalletRoutes);
 router.use('/seller/support', sellerSupportRoutes);
+router.use('/seller/analytics', sellerAnalyticsRoutes);
+router.use('/seller/reports', sellerReportRoutes);
 router.use('/seller', sellerRoutes);
+
 router.use('/admin/dashboard', adminDashboardRoutes);
 router.use('/admin/users', adminUserRoutes);
 router.use('/admin/sellers', adminSellerManagementRoutes);
@@ -73,12 +80,14 @@ router.use('/admin/returns', adminReturnRoutes);
 router.use('/admin/reviews', adminReviewRoutes);
 router.use('/admin/platform-fees', adminPlatformFeeRoutes);
 router.use('/admin/analytics', adminAnalyticsRoutes);
+router.use('/admin/reports', adminReportRoutes);
 router.use('/admin/audit-logs', adminAuditRoutes);
 router.use('/admin/finance', adminFinanceRoutes);
 router.use('/admin/coupons', adminCouponRoutes);
 router.use('/admin/inventory', adminInventoryRoutes);
 router.use('/admin/payouts', adminPayoutRoutes);
 router.use('/admin/support', adminSupportRoutes);
+
 router.use('/support', supportRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/products', productRoutes);
