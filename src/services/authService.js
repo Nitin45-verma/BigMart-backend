@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const SellerApplication = require('../models/SellerApplication');
 const ApiError = require('../utils/ApiError');
 const {
   generateAccessToken,
@@ -124,17 +125,26 @@ const handleGoogleAuth = async (profile) => {
   user.lastLoginAt = new Date();
   await user.save();
 
+  const responseUser = {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatar: user.avatar,
+    isEmailVerified: user.isEmailVerified
+  };
+
+  if (user.role === 'customer') {
+    const app = await SellerApplication.findOne({ user: user._id }).sort({ createdAt: -1 });
+    if (app) {
+      responseUser.sellerApplicationStatus = app.status;
+    }
+  }
+
   return {
     accessToken,
     rawRefreshToken,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      avatar: user.avatar,
-      isEmailVerified: user.isEmailVerified
-    }
+    user: responseUser
   };
 };
 
@@ -267,16 +277,25 @@ const login = async ({ email, password }) => {
   user.lastLoginAt = new Date();
   await user.save();
 
+  const responseUser = {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isEmailVerified: user.isEmailVerified
+  };
+
+  if (user.role === 'customer') {
+    const app = await SellerApplication.findOne({ user: user._id }).sort({ createdAt: -1 });
+    if (app) {
+      responseUser.sellerApplicationStatus = app.status;
+    }
+  }
+
   return {
     accessToken,
     rawRefreshToken,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      isEmailVerified: user.isEmailVerified
-    }
+    user: responseUser
   };
 };
 
@@ -348,7 +367,7 @@ const getCurrentUser = async (userId) => {
     throw new ApiError(404, 'User not found');
   }
 
-  return {
+  const responseUser = {
     id: user._id,
     name: user.name,
     email: user.email,
@@ -356,6 +375,15 @@ const getCurrentUser = async (userId) => {
     avatar: user.avatar,
     isEmailVerified: user.isEmailVerified
   };
+
+  if (user.role === 'customer') {
+    const app = await SellerApplication.findOne({ user: user._id }).sort({ createdAt: -1 });
+    if (app) {
+      responseUser.sellerApplicationStatus = app.status;
+    }
+  }
+
+  return responseUser;
 };
 
 module.exports = {
