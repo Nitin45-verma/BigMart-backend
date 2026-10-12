@@ -9,13 +9,17 @@ const EARTH_RADIUS_KM = 6371;
  * Validates whether latitude and longitude are valid numbers within geographic boundaries.
  */
 const isValidCoordinates = (lat, lon) => {
+  if (lat === null || lat === undefined || lat === '' || lon === null || lon === undefined || lon === '') {
+    return false;
+  }
+
   const numLat = Number(lat);
   const numLon = Number(lon);
 
-  if (typeof lat !== 'number' || isNaN(numLat) || numLat < -90 || numLat > 90) {
+  if (isNaN(numLat) || numLat < -90 || numLat > 90) {
     return false;
   }
-  if (typeof lon !== 'number' || isNaN(numLon) || numLon < -180 || numLon > 180) {
+  if (isNaN(numLon) || numLon < -180 || numLon > 180) {
     return false;
   }
   return true;

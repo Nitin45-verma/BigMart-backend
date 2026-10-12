@@ -14,8 +14,12 @@ const getSellerProfile = (seller) => {
     businessName: seller.businessName,
     businessType: seller.businessType,
     description: seller.description || '',
+    gstNumber: seller.gstNumber || '',
+    panNumber: seller.panNumber || '',
     businessAddress: seller.businessAddress || {},
     pickupAddress: seller.pickupAddress || {},
+    addressLine1: seller.businessAddress?.addressLine1 || '',
+    addressLine2: seller.businessAddress?.addressLine2 || '',
     city: seller.businessAddress?.city || '',
     state: seller.businessAddress?.state || '',
     country: seller.businessAddress?.country || 'India',
@@ -46,11 +50,11 @@ const updateSellerProfile = async (seller, updateData) => {
   }
 
   if (updateData.latitude !== undefined) {
-    allowedUpdates.latitude = updateData.latitude !== null ? Number(updateData.latitude) : null;
+    allowedUpdates.latitude = updateData.latitude !== null && updateData.latitude !== '' ? Number(updateData.latitude) : null;
   }
 
   if (updateData.longitude !== undefined) {
-    allowedUpdates.longitude = updateData.longitude !== null ? Number(updateData.longitude) : null;
+    allowedUpdates.longitude = updateData.longitude !== null && updateData.longitude !== '' ? Number(updateData.longitude) : null;
   }
 
   // Handle businessAddress updates
@@ -62,10 +66,19 @@ const updateSellerProfile = async (seller, updateData) => {
   }
 
   // Handle top-level address fields fallback into businessAddress
-  if (updateData.city || updateData.state || updateData.country || updateData.postalCode) {
+  if (
+    updateData.addressLine1 ||
+    updateData.addressLine2 ||
+    updateData.city ||
+    updateData.state ||
+    updateData.country ||
+    updateData.postalCode
+  ) {
     allowedUpdates.businessAddress = {
       ...seller.businessAddress?.toObject?.(),
       ...allowedUpdates.businessAddress,
+      ...(updateData.addressLine1 && { addressLine1: updateData.addressLine1.trim() }),
+      ...(updateData.addressLine2 && { addressLine2: updateData.addressLine2.trim() }),
       ...(updateData.city && { city: updateData.city.trim() }),
       ...(updateData.state && { state: updateData.state.trim() }),
       ...(updateData.country && { country: updateData.country.trim() }),
@@ -79,6 +92,26 @@ const updateSellerProfile = async (seller, updateData) => {
       ...seller.pickupAddress?.toObject?.(),
       ...updateData.pickupAddress
     };
+  }
+
+  // Synchronize coordinates between root and businessAddress
+  if (allowedUpdates.latitude !== undefined) {
+    if (!allowedUpdates.businessAddress) {
+      allowedUpdates.businessAddress = seller.businessAddress?.toObject?.() || {};
+    }
+    allowedUpdates.businessAddress.latitude = allowedUpdates.latitude;
+  }
+  if (allowedUpdates.longitude !== undefined) {
+    if (!allowedUpdates.businessAddress) {
+      allowedUpdates.businessAddress = seller.businessAddress?.toObject?.() || {};
+    }
+    allowedUpdates.businessAddress.longitude = allowedUpdates.longitude;
+  }
+  if (allowedUpdates.businessAddress?.latitude !== undefined && allowedUpdates.latitude === undefined) {
+    allowedUpdates.latitude = allowedUpdates.businessAddress.latitude;
+  }
+  if (allowedUpdates.businessAddress?.longitude !== undefined && allowedUpdates.longitude === undefined) {
+    allowedUpdates.longitude = allowedUpdates.businessAddress.longitude;
   }
 
   const updatedSeller = await Seller.findByIdAndUpdate(

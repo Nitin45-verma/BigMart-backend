@@ -76,6 +76,21 @@ const validateSellerApplyInput = (req, res, next) => {
     }
   }
 
+  const { latitude, longitude } = req.body;
+  if (latitude !== undefined && latitude !== null && latitude !== '') {
+    const numLat = Number(latitude);
+    if (isNaN(numLat) || numLat < -90 || numLat > 90) {
+      return next(new ApiError(400, 'Latitude must be a valid number between -90 and 90'));
+    }
+  }
+
+  if (longitude !== undefined && longitude !== null && longitude !== '') {
+    const numLon = Number(longitude);
+    if (isNaN(numLon) || numLon < -180 || numLon > 180) {
+      return next(new ApiError(400, 'Longitude must be a valid number between -180 and 180'));
+    }
+  }
+
   next();
 };
 

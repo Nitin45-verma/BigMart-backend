@@ -56,13 +56,13 @@ const validateSellerProfileUpdate = (req, res, next) => {
   }
 
   const validateCoords = (lat, lng) => {
-    if (lat !== undefined && lat !== null) {
+    if (lat !== undefined && lat !== null && lat !== '') {
       const numLat = Number(lat);
       if (isNaN(numLat) || numLat < -90 || numLat > 90) {
         throw new ApiError(400, 'Latitude must be a valid number between -90 and 90');
       }
     }
-    if (lng !== undefined && lng !== null) {
+    if (lng !== undefined && lng !== null && lng !== '') {
       const numLng = Number(lng);
       if (isNaN(numLng) || numLng < -180 || numLng > 180) {
         throw new ApiError(400, 'Longitude must be a valid number between -180 and 180');

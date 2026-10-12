@@ -39,6 +39,8 @@ const applyForSeller = async (userId, applicationData) => {
     postalCode: applicationData.postalCode.trim(),
     gstin: applicationData.gstin ? applicationData.gstin.trim() : undefined,
     panNumber: applicationData.panNumber ? applicationData.panNumber.trim() : undefined,
+    latitude: applicationData.latitude !== undefined && applicationData.latitude !== null && applicationData.latitude !== '' ? Number(applicationData.latitude) : undefined,
+    longitude: applicationData.longitude !== undefined && applicationData.longitude !== null && applicationData.longitude !== '' ? Number(applicationData.longitude) : undefined,
     status: 'pending',
     submittedAt: new Date()
   });
@@ -142,18 +144,38 @@ const adminApproveSellerApplication = async (adminUserId, applicationId) => {
   await application.save();
 
   // 3. Create or update Seller profile record
+  const businessAddressObj = {
+    addressLine1: application.businessAddress,
+    city: application.city,
+    state: application.state,
+    postalCode: application.postalCode,
+    country: application.country || 'India',
+    latitude: application.latitude,
+    longitude: application.longitude
+  };
+
   let seller = await Seller.findOne({ user: user._id });
   if (!seller) {
     seller = await Seller.create({
       user: user._id,
       businessName: application.businessName,
       businessType: application.businessType,
+      businessAddress: businessAddressObj,
+      latitude: application.latitude,
+      longitude: application.longitude,
       gstNumber: application.gstin,
       panNumber: application.panNumber,
       verificationStatus: 'approved'
     });
   } else {
     seller.verificationStatus = 'approved';
+    if (!seller.businessAddress || !seller.businessAddress.addressLine1) {
+      seller.businessAddress = businessAddressObj;
+    }
+    if (seller.latitude === undefined && application.latitude !== undefined) {
+      seller.latitude = application.latitude;
+      seller.longitude = application.longitude;
+    }
     await seller.save();
   }
 
