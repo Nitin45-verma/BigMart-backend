@@ -87,23 +87,27 @@ const runSellerLocationTests = async () => {
     }
 
     // ==========================================
-    // TEST 2: ANOTHER SELLER (NK IT SOLUTION) & MULTI-VENDOR
+    // TEST 2: ANOTHER SELLER (APPROVED STORE) & MULTI-VENDOR
     // ==========================================
-    console.log('\n--- 2. Testing Another Seller (Nk It Solution) ---');
-    const nkSeller = await Seller.findOne({ businessName: /Nk It Solution/i });
-    if (!nkSeller) {
-      throw new Error('Nk It Solution seller record not found in database');
+    console.log('\n--- 2. Testing Another Seller (Approved Store) ---');
+    let secondSeller = await Seller.findOne({ businessName: /Approved Store/i });
+    if (!secondSeller) {
+      throw new Error('Approved Store seller record not found in database');
     }
 
-    const nkUser = await User.findById(nkSeller.user);
-    const nkToken = generateAccessToken(nkUser);
+    // Ensure Approved Store is approved
+    secondSeller.verificationStatus = 'approved';
+    await secondSeller.save();
 
-    // Update Nk It Solution via PATCH /seller/dashboard/profile API
-    const updateNkRes = await fetch(`${BASE_URL}/seller/dashboard/profile`, {
+    const secondUser = await User.findById(secondSeller.user);
+    const secondToken = generateAccessToken(secondUser);
+
+    // Update Approved Store via PATCH /seller/dashboard/profile API with real coordinates
+    const updateSecondRes = await fetch(`${BASE_URL}/seller/dashboard/profile`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${nkToken}`
+        Authorization: `Bearer ${secondToken}`
       },
       body: JSON.stringify({
         businessAddress: {
@@ -119,42 +123,46 @@ const runSellerLocationTests = async () => {
         longitude: 75.733611
       })
     });
-    const updateNkData = await updateNkRes.json();
+    const updateSecondData = await updateSecondRes.json();
 
-    if (updateNkRes.status === 200 && updateNkData.data?.latitude === 26.793319) {
+    if (updateSecondRes.status === 200 && updateSecondData.data?.latitude === 26.793319) {
       results['Another Seller Profile Location Update API'] = 'PASS';
-      console.log('✓ Another Seller (Nk It Solution) Location Updated via API: PASS');
+      console.log('✓ Another Seller Location Updated via API: PASS');
     } else {
       results['Another Seller Profile Location Update API'] = 'FAIL';
-      console.error(`❌ Another Seller Location Update: FAIL (${JSON.stringify(updateNkData)})`);
+      console.error(`❌ Another Seller Location Update: FAIL (${JSON.stringify(updateSecondData)})`);
     }
 
-    // Ensure Nk It Solution has a product
-    let nkCategory = await Category.findOne({ status: 'active' });
-    let nkProduct = await Product.findOne({ seller: nkSeller._id });
-    if (!nkProduct) {
-      nkProduct = await Product.create({
+    // Ensure Approved Store has a product
+    let testCategory = await Category.findOne({});
+    if (!testCategory) {
+      testCategory = await Category.create({ name: 'General', slug: `gen-${timestamp}` });
+    }
+
+    let secondProduct = await Product.findOne({ seller: secondSeller._id });
+    if (!secondProduct) {
+      secondProduct = await Product.create({
         name: 'USB-C Fast Charging Cable',
         slug: `usbc-fast-charging-cable-${timestamp}`,
         sku: `NK-CABLE-${timestamp}`,
         description: 'Durable fast charging cable',
         price: 299,
-        category: nkCategory._id,
-        seller: nkSeller._id,
+        category: testCategory._id,
+        seller: secondSeller._id,
         stock: 50,
         status: 'active',
         isPublished: true
       });
     }
 
-    // Set up multi-vendor cart with Saraswati & Nk It Solution
+    // Set up multi-vendor cart with Saraswati & Second Seller
     await Cart.findOneAndUpdate(
       { user: customerUser._id },
       {
         $set: {
           items: [
             { product: saraswatiProduct._id, quantity: 1 },
-            { product: nkProduct._id, quantity: 1 }
+            { product: secondProduct._id, quantity: 1 }
           ]
         }
       },
@@ -172,17 +180,17 @@ const runSellerLocationTests = async () => {
     const multiQuoteData = await multiQuoteRes.json();
 
     const saraswatiItem = multiQuoteData.data?.shipping?.find(s => s.sellerId.toString() === saraswatiSeller._id.toString());
-    const nkItem = multiQuoteData.data?.shipping?.find(s => s.sellerId.toString() === nkSeller._id.toString());
+    const secondItem = multiQuoteData.data?.shipping?.find(s => s.sellerId.toString() === secondSeller._id.toString());
 
     if (
       multiQuoteRes.status === 200 &&
       multiQuoteData.data?.shipping?.length === 2 &&
       saraswatiItem?.deliveryFee === 130 &&
-      nkItem?.deliveryFee === 60 &&
+      secondItem?.deliveryFee === 60 &&
       multiQuoteData.data?.totalDeliveryFee === 190
     ) {
       results['Multi-Vendor Shipping Quote (Saraswati + Another Seller)'] = 'PASS';
-      console.log(`✓ Multi-Vendor Shipping Quote: PASS (Saraswati: ₹130, Nk: ₹60, Total: ₹190)`);
+      console.log(`✓ Multi-Vendor Shipping Quote: PASS (Saraswati: ₹130, Second Seller: ₹60, Total: ₹190)`);
     } else {
       results['Multi-Vendor Shipping Quote (Saraswati + Another Seller)'] = 'FAIL';
       console.error(`❌ Multi-Vendor Quote: FAIL (${JSON.stringify(multiQuoteData)})`);
@@ -212,7 +220,7 @@ const runSellerLocationTests = async () => {
       sku: `UNMAP-${timestamp}`,
       description: 'Item from seller without coords',
       price: 500,
-      category: nkCategory._id,
+      category: testCategory._id,
       seller: noCoordsSeller._id,
       stock: 10,
       status: 'active',
@@ -248,7 +256,7 @@ const runSellerLocationTests = async () => {
     }
 
     // Checkout creation must also fail
-    const blockedCheckoutRes = await fetch(`${BASE_URL}/orders/checkout`, {
+    const blockedCheckoutRes = await fetch(`${BASE_URL}/orders`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -261,6 +269,7 @@ const runSellerLocationTests = async () => {
       console.log('✓ Blocked Checkout Order Creation: PASS (HTTP 400)');
     } else {
       results['Blocked Checkout When Coordinates Missing'] = 'FAIL';
+      console.error(`❌ Blocked Checkout Order Creation: FAIL (${blockedCheckoutRes.status})`);
     }
 
     // ==========================================
@@ -272,7 +281,7 @@ const runSellerLocationTests = async () => {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${nkToken}`
+        Authorization: `Bearer ${secondToken}`
       },
       body: JSON.stringify({ latitude: 120, longitude: 75 })
     });
