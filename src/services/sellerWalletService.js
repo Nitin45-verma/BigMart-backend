@@ -87,9 +87,10 @@ const creditOrderEarnings = async (orderId) => {
     const idempotencyKey = `ORDER_EARNING:${orderId}:${sellerId}`;
 
     // Check if transaction already exists (idempotency check outside session to support standalone)
+    // Skip silently instead of throwing — multi-seller loop must not abort partway through
     const existingTx = await SellerWalletTransaction.findOne({ idempotencyKey });
     if (existingTx) {
-      throw new ApiError(409, `Earnings already credited for order ${orderId} seller ${sellerId}`);
+      continue; // Already credited for this seller; move to next
     }
 
     await withSession(async (session) => {
