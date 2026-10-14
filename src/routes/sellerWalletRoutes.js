@@ -14,7 +14,8 @@ router.use(authenticate, authorizeRoles('seller'), authorizeSeller);
 // GET /api/v1/seller/wallet
 router.get('/', async (req, res, next) => {
   try {
-    const wallet = await sellerWalletService.getWalletSummary(req.user.sellerId);
+    // req.seller is set by authorizeSeller middleware (Seller mongoose document)
+    const wallet = await sellerWalletService.getWalletSummary(req.seller._id);
     res.status(200).json({
       success: true,
       data: wallet
@@ -31,7 +32,7 @@ router.get('/transactions', async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const query = { seller: req.user.sellerId };
+    const query = { seller: req.seller._id };
     if (req.query.type) {
       query.type = req.query.type;
     }
@@ -65,7 +66,7 @@ router.get('/transactions/:transactionId', async (req, res, next) => {
   try {
     const transaction = await SellerWalletTransaction.findOne({
       _id: req.params.transactionId,
-      seller: req.user.sellerId
+      seller: req.seller._id
     })
       .populate('order', 'orderNumber grandTotal')
       .populate('payout');
@@ -90,7 +91,7 @@ router.get('/payouts', async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const query = { seller: req.user.sellerId };
+    const query = { seller: req.seller._id };
     if (req.query.status) {
       query.status = req.query.status;
     }
@@ -122,7 +123,7 @@ router.get('/payouts/:payoutId', async (req, res, next) => {
   try {
     const payout = await SellerPayout.findOne({
       _id: req.params.payoutId,
-      seller: req.user.sellerId
+      seller: req.seller._id
     });
 
     if (!payout) {
@@ -153,7 +154,7 @@ router.post('/payouts', async (req, res, next) => {
       throw new ApiError(400, 'Amount has excessive decimal precision');
     }
 
-    const payout = await sellerWalletService.requestPayout(req.user.sellerId, numAmount);
+    const payout = await sellerWalletService.requestPayout(req.seller._id, numAmount);
 
     res.status(201).json({
       success: true,
