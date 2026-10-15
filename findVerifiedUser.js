@@ -18,7 +18,7 @@ async function findUser() {
       console.log('No verified user found.');
     }
     process.exit(0);
-  } catch(e) {
+  } catch (e) {
     console.error(e);
     process.exit(1);
   }

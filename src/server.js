@@ -11,6 +11,13 @@ const PORT = process.env.PORT || 5000;
 
 let server;
 
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Server is running smoothly!"
+  });
+});
+
 /**
  * Initializes database connection and starts Express HTTP server.
  */
