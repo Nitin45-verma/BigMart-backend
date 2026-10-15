@@ -59,6 +59,14 @@ if (process.env.NODE_ENV === 'development') {
 
 // API v1 routes
 app.use('/api/v1', routes);
+// app.js
+
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Server is running smoothly!"
+  });
+});
 
 // Handle undefined routes (404)
 app.use(notFoundHandler);
