@@ -25,9 +25,24 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin images if necessary, otherwise tighten
 }));
 
+// Allowed Origins List (Localhost + Production Vercel App)
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://big-mart-woad.vercel.app', // Your Vercel domain
+  process.env.FRONTEND_URL
+].filter(Boolean); // Remove undefined/null if FRONTEND_URL is not set
+
 // Enable CORS
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman) or matched allowed origins
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS policy'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -51,6 +66,13 @@ app.get('/health', (req, res) => {
   res.status(200).json({ success: true, message: 'Server is healthy' });
 });
 
+// Root Route Endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Server is running smoothly!"
+  });
+});
 
 // HTTP logging in development environment
 if (process.env.NODE_ENV === 'development') {
@@ -59,14 +81,6 @@ if (process.env.NODE_ENV === 'development') {
 
 // API v1 routes
 app.use('/api/v1', routes);
-// app.js
-
-app.get('/', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Server is running smoothly!"
-  });
-});
 
 // Handle undefined routes (404)
 app.use(notFoundHandler);
