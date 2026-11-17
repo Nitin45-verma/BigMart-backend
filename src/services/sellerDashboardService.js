@@ -139,10 +139,11 @@ const getDashboardSummary = async (seller) => {
     Product.countDocuments({ seller: sellerId, status: 'archived' })
   ]);
 
-  // 2. Fetch financially valid (paid) orders containing items from this seller
+  // 2. Fetch financially valid (paid) orders containing items from this seller.
+  // Use payment.status as sole source of truth — orderStatus tracks fulfillment, not payment.
   const paidOrders = await Order.find({
     'items.seller': sellerId,
-    $or: [{ 'payment.status': 'paid' }, { orderStatus: 'paid' }]
+    'payment.status': 'paid'
   });
 
   const feeRate = getSellerPlatformFeeRate(seller);
@@ -460,9 +461,10 @@ const getSellerSalesSummary = async (seller, { period = '30d', from, to }) => {
     startDate.setDate(startDate.getDate() - days);
   }
 
+  // Use payment.status as sole source of truth — orderStatus tracks fulfillment, not payment.
   const paidOrders = await Order.find({
     'items.seller': sellerId,
-    $or: [{ 'payment.status': 'paid' }, { orderStatus: 'paid' }],
+    'payment.status': 'paid',
     createdAt: { $gte: startDate, $lte: endDate }
   }).sort({ createdAt: 1 });
 

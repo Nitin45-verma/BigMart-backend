@@ -5,9 +5,16 @@ const notificationService = require('./notificationService');
 
 /**
  * Valid order status state machine transitions map.
+ *
+ * NOTE: 'pending_payment' → 'paid' is intentionally excluded.
+ * The 'paid' status is set exclusively by the payment verification flow
+ * (orderService.verifyPayment) which atomically updates payment.status,
+ * decrements stock, credits seller wallets, and clears the cart.
+ * Allowing admin to bypass this would desync payment.status, skip wallet
+ * credits, and misrepresent revenue in finance reports.
  */
 const VALID_TRANSITIONS = {
-  pending_payment: ['paid', 'cancelled'],
+  pending_payment: ['cancelled'],
   paid: ['processing', 'shipped', 'cancelled'],
   processing: ['shipped', 'cancelled'],
   shipped: ['out_of_delivery', 'delivered', 'cancelled'],

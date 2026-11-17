@@ -267,6 +267,14 @@ const verifyPayment = async (userId, { razorpay_order_id, razorpay_payment_id, r
     };
   }
 
+  // Mark payment as pending while verification is in progress.
+  // This makes the 'pending' state visible in admin/seller panels during the
+  // verification window (between Razorpay callback and signature check).
+  if (order.payment.status === 'created') {
+    order.payment.status = 'pending';
+    await order.save();
+  }
+
   // Signature verification
   const isValidSignature = razorpayService.verifyPaymentSignature({
     razorpayOrderId: razorpay_order_id,

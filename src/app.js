@@ -17,6 +17,14 @@ const errorHandler = require('./middleware/error.middleware');
 
 const app = express();
 
+// Normalize URL paths (replace multiple consecutive slashes with a single slash)
+app.use((req, res, next) => {
+  if (req.url && req.url.includes('//')) {
+    req.url = req.url.replace(/\/+/g, '/');
+  }
+  next();
+});
+
 // Initialize Passport strategy configuration
 configurePassport();
 
@@ -36,8 +44,12 @@ const allowedOrigins = [
 // Enable CORS
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, Postman) or matched allowed origins
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (like mobile apps, curl, Postman), matched allowed origins, or any Vercel domain
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      /\.vercel\.app$/.test(origin)
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS policy'));

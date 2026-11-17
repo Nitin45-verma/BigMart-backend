@@ -45,8 +45,12 @@ const getFinanceSummary = async ({ period = '30d', from, to } = {}) => {
     ? { createdAt: { $gte: startDate, $lte: endDate } }
     : { createdAt: { $lte: endDate } };
 
+  // Use payment.status as the sole source of truth for financial calculations.
+  // orderStatus tracks fulfillment state; payment.status tracks Razorpay verification.
+  // Using $or would risk counting orders where admin changed orderStatus without
+  // actual payment verification, leading to inflated revenue figures.
   const paidFilter = {
-    $or: [{ 'payment.status': 'paid' }, { orderStatus: 'paid' }],
+    'payment.status': 'paid',
     ...dateFilter
   };
 
