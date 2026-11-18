@@ -10,6 +10,17 @@ const createTransporter = () => {
   const user = process.env.EMAIL_USER;
   const pass = process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS;
 
+  // Use Gmail service preset for maximum cloud compatibility when targeting Gmail
+  if (host === 'smtp.gmail.com' || process.env.EMAIL_SERVICE === 'gmail') {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: user && pass ? { user, pass } : undefined,
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+  }
+
   const transporterConfig = {
     host,
     port,
