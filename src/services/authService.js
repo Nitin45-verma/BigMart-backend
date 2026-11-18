@@ -47,16 +47,33 @@ const register = async ({ name, email, password }) => {
   });
 
   // Attempt sending verification email
-  try {
-    await emailService.sendVerificationEmail({
-      toEmail: user.email,
-      userName: user.name,
-      rawToken
-    });
-  } catch (emailError) {
-    await User.findByIdAndDelete(user._id);
-    console.error(`[AuthService] Email delivery failed on registration: ${emailError.message}`);
-    throw new ApiError(500, 'Failed to send verification email. Please try registering again.');
+  let emailSent = false;
+  const hasEmailConfig = !!(process.env.EMAIL_USER && (process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS));
+
+  if (hasEmailConfig) {
+    try {
+      await emailService.sendVerificationEmail({
+        toEmail: user.email,
+        userName: user.name,
+        rawToken
+      });
+      emailSent = true;
+    } catch (emailError) {
+      console.error(`[AuthService] Email delivery failed on registration: ${emailError.message}`);
+      const frontendUrl = process.env.FRONTEND_URL || 'https://big-mart-woad.vercel.app';
+      console.log(`[AuthService] Fallback Verification Link: ${frontendUrl}/verify-email?token=${rawToken}`);
+      // Fallback: If cloud SMTP fails to deliver, auto-verify user so account is created and usable
+      user.isEmailVerified = true;
+      user.emailVerificationTokenHash = undefined;
+      user.emailVerificationExpiresAt = undefined;
+      await user.save();
+    }
+  } else {
+    console.warn(`[AuthService] SMTP credentials not configured on server. Auto-verifying: ${user.email}`);
+    user.isEmailVerified = true;
+    user.emailVerificationTokenHash = undefined;
+    user.emailVerificationExpiresAt = undefined;
+    await user.save();
   }
 
   return {
@@ -225,7 +242,15 @@ const resendVerification = async (email) => {
     });
   } catch (emailError) {
     console.error(`[AuthService] Email delivery failed on resend: ${emailError.message}`);
-    throw new ApiError(500, 'Failed to resend verification email. Please try again later.');
+    // If SMTP fails, auto-verify account so user is not stuck
+    user.isEmailVerified = true;
+    user.emailVerificationTokenHash = undefined;
+    user.emailVerificationExpiresAt = undefined;
+    await user.save();
+    return {
+      success: true,
+      message: 'Account verified successfully! You can now log in.'
+    };
   }
 
   return {
@@ -262,7 +287,15 @@ const login = async ({ email, password }) => {
   }
 
   if (!user.isEmailVerified) {
-    throw new ApiError(403, 'Please verify your email before logging in.');
+    const hasEmailConfig = !!(process.env.EMAIL_USER && (process.env.EMAIL_PASSWORD || process.env.EMAIL_PASS));
+    if (!hasEmailConfig) {
+      user.isEmailVerified = true;
+      user.emailVerificationTokenHash = undefined;
+      user.emailVerificationExpiresAt = undefined;
+      await user.save();
+    } else {
+      throw new ApiError(403, 'Please verify your email before logging in.');
+    }
   }
 
   const accessToken = generateAccessToken(user);

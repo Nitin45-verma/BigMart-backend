@@ -9,9 +9,13 @@ const register = async (req, res, next) => {
   try {
     const userData = await authService.register(req.body);
 
+    const message = userData.isEmailVerified
+      ? 'Registration successful! You can now log in to your account.'
+      : 'Registration successful. Please check your email to verify your account.';
+
     res.status(201).json({
       success: true,
-      message: 'Registration successful. Please check your email to verify your account.',
+      message,
       data: {
         user: userData
       }

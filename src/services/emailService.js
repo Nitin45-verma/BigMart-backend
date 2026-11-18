@@ -81,7 +81,7 @@ const verifyTransporter = async () => {
  * Sends a verification email to a user.
  */
 const sendVerificationEmail = async ({ toEmail, userName, rawToken }) => {
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://big-mart-woad.vercel.app';
   const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
   const sender = process.env.EMAIL_FROM || process.env.EMAIL_USER || '"BigMart Marketplace" <no-reply@bigmart.com>';
 
